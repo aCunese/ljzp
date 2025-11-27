@@ -48,6 +48,9 @@
 - **传感器监测**
   - 看板展示温度、湿度、土壤含水量、光照、CO₂ 等指标。
   - 内置 ECharts 历史分析，支持 1/3/7 天时间维度切换与自动刷新。
+- **硬件控制中心**
+  - 后端新增 TCP 网关，完全复刻 Android APP 的 Socket 协议，可直接对接 `192.168.4.1:8080` 设备。
+  - 支持多设备多选、指令回执（OK/ERR 自动落入 `tb_device_control_log`）以及 `/device/connections` 实时查询在线状态。
 - **知识与方案中心**
   - 维护病害百科、典型症状、危害等级与防治要点。
   - `/solution/generate` 联合知识库、实时天气（Open-Meteo 缓存）与 Spark LLM 输出个性化施药建议、风险评估、投入产出分析。
@@ -140,6 +143,19 @@ yolo_cropDisease_detection_web/
    - 登录默认管理员账号（可在数据库 `user` 表中查看或自定义）。
    - 体验传感器大屏、识别任务与智能方案等模块。
 
+### 硬件控制配置
+
+1. 若硬件设备以 AP 形式暴露 `192.168.4.1:8080`（与 Android APP 同协议），请在 `yolo_cropDisease_detection_springboot/src/main/resources/application.properties` 中开启：
+   ```properties
+   hardware.tcp.enabled=true
+   hardware.tcp.host=192.168.4.1
+   hardware.tcp.port=8080
+   hardware.tcp.default-device-id=DEVICE_001
+   ```
+   可按需为多台设备追加 `hardware.tcp.devices[n].device-id/host/port`。
+2. 前端 `deviceControl` 页面提交 `deviceIds` 数组，后台会逐台记录 `tb_device_control_log`，TCP 发送后等待硬件返回 `OK/ERR` 并自动更新状态。
+3. 调用 `GET /api/device/connections` 可实时查看连接是否在线、最近心跳时间，便于在大屏上展示硬件运行状况。
+
 如需容器化，可参考 `QUICKSTART.md` 提供的 docker-compose 示例。
 
 ## 常见问题
@@ -159,4 +175,3 @@ yolo_cropDisease_detection_web/
 ---
 
 如需二次开发或部署支持，可先阅读 `yolo_cropDisease_detection_springboot/README.md`、`QUICKSTART.md` 获取更细节的环境配置与调试指南。
-

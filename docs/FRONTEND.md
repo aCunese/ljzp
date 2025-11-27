@@ -56,7 +56,8 @@ src/
 7. **任务与协同（`src/views/task`）**
    - 列表 + 卡片 + 甘特视图（依赖 `vue-grid-layout`），可关联识别记录编号、负责人、优先级，状态颜色提示。
 8. **聊天、设备控制、个人中心**
-   - `chat` 页面通过 WebSocket 接入 LLM 服务（预留）；`deviceControl`（位于仓库根 `src/views/deviceControl`）展示 IoT 在线状态与继电器操作面板；`personal` 支持修改头像、密码、通知偏好。
+   - `chat` 页面通过 WebSocket 接入 LLM 服务（预留）；`deviceControl`（位于 `src/views/deviceControl`）在最新版本中新增“多设备多选框 + TCP 连接状态面板”，调用 `/device/connections` 轮询硬件在线信息，操作时向 `/device/control` 提交 `deviceIds` 数组即可一次下发多台设备。
+   - `personal` 支持修改头像、密码、通知偏好。
 
 ## 7. 设计细节与交互亮点
 - **统一反馈**：所有表单操作使用 Element Plus `ElMessage`/`ElMessageBox`，结合 loading 状态避免重复提交。
