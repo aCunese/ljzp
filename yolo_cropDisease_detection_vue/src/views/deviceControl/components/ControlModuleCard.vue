@@ -138,6 +138,7 @@ $lamp-info: #1e88e5;
 	background: #ffffff;
 	box-shadow: $card-shadow;
 	transition: transform 0.25s ease, box-shadow 0.25s ease;
+	height: 100%;
 
 	&:hover {
 		transform: translateY(-4px);

@@ -467,6 +467,7 @@ onMounted(async () => {
 		grid-template-columns: minmax(0, 7fr) minmax(280px, 4fr);
 		gap: 20px;
 		margin-top: 20px;
+		align-items: stretch;
 	}
 }
 
@@ -480,12 +481,18 @@ onMounted(async () => {
 	display: flex;
 	flex-direction: column;
 	gap: 20px;
+	align-self: stretch;
+	height: 100%;
+	flex: 1;
 }
 
 .control-module-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 	gap: 18px;
+	grid-auto-rows: minmax(0, 1fr);
+	align-content: stretch;
+	height: 100%;
 }
 
 @media (max-width: 1200px) {

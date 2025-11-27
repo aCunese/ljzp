@@ -2,9 +2,13 @@ package com.example.Kcsj.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Data;
+import org.springframework.util.StringUtils;
 
 import java.io.Serializable;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Data
 public class DeviceControlRequest implements Serializable {
@@ -12,6 +16,11 @@ public class DeviceControlRequest implements Serializable {
 
     private Long taskId;
     private String deviceId;
+
+    /**
+     * 预留多设备下发能力，当同时指定 deviceId 与 deviceIds 时优先使用 deviceIds
+     */
+    private List<String> deviceIds;
 
     /**
      * 硬件执行动作标识，兼容旧版字段 command
@@ -38,5 +47,21 @@ public class DeviceControlRequest implements Serializable {
             return commandValue != null ? String.valueOf(commandValue) : null;
         }
         return null;
+    }
+
+    /**
+     * 解析需要下发的设备 ID 列表
+     */
+    public List<String> getResolvedDeviceIds() {
+        if (deviceIds != null && !deviceIds.isEmpty()) {
+            return deviceIds.stream()
+                    .filter(StringUtils::hasText)
+                    .map(String::trim)
+                    .collect(Collectors.toList());
+        }
+        if (StringUtils.hasText(deviceId)) {
+            return Collections.singletonList(deviceId.trim());
+        }
+        return Collections.emptyList();
     }
 }

@@ -34,14 +34,16 @@
 							<span v-if="action.durationSeconds"> ({{ action.durationSeconds }}s) </span>
 						</li>
 					</ul>
-					<el-button
-						size="small"
-						type="primary"
-						:disabled="scene.comingSoon || disabled"
-						@click="emit('trigger', scene)"
-					>
-						{{ scene.comingSoon ? '敬请期待' : '立即执行' }}
-					</el-button>
+					<div class="scene-card__actions-footer">
+						<el-button
+							size="small"
+							type="primary"
+							:disabled="scene.comingSoon || disabled"
+							@click="emit('trigger', scene)"
+						>
+							{{ scene.comingSoon ? '敬请期待' : '立即执行' }}
+						</el-button>
+					</div>
 				</div>
 			</div>
 
@@ -237,6 +239,13 @@ const tagType = (level: ConditionTip['level']) => {
 		color: rgba(31, 64, 53, 0.7);
 		font-size: 12px;
 		line-height: 1.6;
+		min-height: 54px;
+	}
+
+	&__actions-footer {
+		margin-top: auto;
+		display: flex;
+		justify-content: flex-start;
 	}
 }
 

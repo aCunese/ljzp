@@ -11,6 +11,34 @@
 
 ---
 
+## 0. 一键启动三端（推荐）
+
+在仓库根目录执行：
+
+```bash
+chmod +x start_all.sh   # 首次运行需要赋权
+./start_all.sh
+```
+
+脚本会自动：
+- 检查/安装前端 `node_modules`、Flask `.venv` 依赖（首次运行或使用 `--install-deps` 时）
+- 并行启动 Vue (`npm run dev`)、Spring Boot (`./mvnw spring-boot:run`) 与 Flask (`.venv/bin/python main.py`)
+- 将输出分别写入 `.devlogs/frontend.log`、`.devlogs/backend.log`、`.devlogs/flask.log`
+
+常用参数：
+- `./start_all.sh --install-deps` 强制重新安装三端依赖
+- `./start_all.sh --skip-frontend`/`--skip-backend`/`--skip-flask` 按需跳过某端
+
+环境变量覆盖：
+- `FRONTEND_CMD="npm run dev -- --host 0.0.0.0"` 自定义前端启动命令
+- `BACKEND_CMD="./mvnw spring-boot:run -Dspring.profiles.active=dev"`
+- `FLASK_CMD="/usr/local/bin/python main.py"`
+- `PYTHON_BIN="/opt/homebrew/bin/python3"` 指定创建虚拟环境使用的 Python
+
+按 `Ctrl+C` 可一次性关闭全部进程；单独查看日志可运行 `tail -f .devlogs/backend.log` 等命令。
+
+---
+
 ## 一、数据库初始化
 
 ### 1. 导入传感器数据表
@@ -60,7 +88,7 @@ cd yolo_cropDisease_detection_springboot
 
 # 方式1：使用Maven
 mvn clean install
-
+./mvnw spring-boot:run
 # 方式2：使用IDE
 # 直接运行 com.example.Kcsj.Kcsj 主类
 ```
@@ -384,5 +412,4 @@ FROM tb_sensor_data;
 ---
 
 **祝您使用愉快！如有问题，请查看《第二阶段实施总结.md》获取详细信息。**
-
 

@@ -27,7 +27,7 @@
    智能硬件（传感器/继电器）
 ```
 - **三端解耦**：前端负责体验与实时可视化，中台负责数据/业务编排，算法服务负责推理供给，松耦合 REST/SocketIO 机制确保可独立扩缩容。
-- **数据通路**：IoT 设备经 MQTT/HTTP 写入 `sensor_data` 表 → 中台提供 `/api/sensor/*` 查询 → 前端看板可视化；图像识别请求从前端表单→中台 `/flask/predict`→Flask `/predictImg`→识别结果写入 `imgrecords`，并可反向触发方案生成及任务落地。
+- **数据通路**：IoT 设备经 MQTT/HTTP 写入 `tb_sensor_data` 表 → 中台提供 `/api/sensor/*` 查询 → 前端看板可视化；图像识别请求从前端表单→中台 `/flask/predict`→Flask `/predictImg`→识别结果写入 `imgrecords`。当前识别结果会自动生成防治方案，未来迭代再串联自动建任务闭环。
 
 ## 3. 代码与目录总览
 | 层 | 目录 | 说明 |
@@ -47,11 +47,11 @@
    - `tb_disease_info`、`tb_remedy`、`tb_solution_plan` 三表承载病害知识、药剂经济性与作业模板。
    - `/solution/generate` 结合传感器最新值与 `WeatherService` 缓存的 Open‑Meteo 气象，实现智能化作业建议。
 3. **农事任务协同**
-   - `/task` 系列接口支持创建、分配、状态流转，并可由防治方案直接落地任务（`SolutionService.applySolution`）。
-   - 前端 `src/views/task` 提供列表/看板/甘特图等视图，关联识别记录或方案。
+   - `/tasks` 系列接口支持创建、分配、状态流转，并可通过“套用方案”手动落地任务（`TaskController#createFromSolution`）。
+   - 前端 `src/views/task` 已提供表格 + 统计卡视图；看板/甘特图和识别记录联动处于预研阶段，在未来版本上线后会补充。
 4. **IoT 感知扩展**
-   - `SensorController` 支持单条、批量写入以及设备列表查询；`sensor` 前端页面提供实时卡片、历史表格与趋势图。
-   - 硬件文档规划 MQTT Topic（`device/sensor/upload/+`、`device/control/+`），后端可通过 Spring Integration MQTT 实现命令下发与数据回传。
+   - `SensorController` 已支持单条、批量写入以及设备列表查询；`sensor` 前端页面提供实时卡片、历史表格与趋势图。
+   - 硬件文档规划 MQTT Topic（`device/sensor/upload/+`、`device/control/+`）。当前版本已具备可选 MQTT 采集与 TCP 指令网关，后续接入真实硬件即可开启自动控制。
 
 ## 5. 部署拓扑与环境要求
 | 组件 | 默认端口 | 依赖 | 备注 |
@@ -66,7 +66,7 @@
 ## 6. 配置要点
 - **Spring Boot**：
   - `spring.datasource.*` 指定数据库；`flask.base-url` 指向推理服务；`weather.*` 控制默认坐标、缓存 TTL、定时刷新。
-  - `sensor.default-device-id` 和 `sensor.batch-limit` 控制 IoT 默认映射。
+  - `sensor.default-device-id` 控制 IoT 默认映射，批量限制参数将随硬件规模化部署一并开放。
 - **前端**：
   - `src/utils/request.ts` 读取 `VITE_API_URL`，Session 存储 token 并自动在 401 时跳转登录。
   - `.env.development`、`.env.production` 可分别配置 API、WebSocket、文件 CDN。
@@ -86,7 +86,7 @@
 ## 8. 运维与观测
 - Spring Boot 侧通过 `Slf4j` 打日志，可融合 ELK；`WeatherService` 使用 `@Scheduled` 定时刷新气象数据。
 - Flask 侧 SocketIO 事件（`processing/completed/failed`）可直接喂给前端或运维看板。
-- 通过数据库中的 `imgrecords/videorecords/camerarecords` 表可统计推理成功率与耗时，结合 `sensor_data` 进行关联分析。
+- 通过数据库中的 `imgrecords/videorecords/camerarecords` 表可统计推理成功率与耗时，结合 `tb_sensor_data` 进行关联分析。
 
 ## 9. 未来迭代路线
 1. **硬件闭环**：按照硬件 TODO 文档完成 MQTT Collector 与 Modbus/继电器驱动，实现阈值触发自动控水、控风、报警。

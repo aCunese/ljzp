@@ -6,9 +6,6 @@
 import json
 import os
 import platform
-import re
-import shutil
-import subprocess
 import threading
 import time
 import uuid
@@ -25,8 +22,8 @@ from flask_socketio import SocketIO, emit
 
 # Flask 应用设置
 class VideoProcessingApp:
+    # 初始化 Flask 应用并设置路由
     def __init__(self, host='0.0.0.0', port=5001):
-        """初始化 Flask 应用并设置路由"""
         self.app = Flask(__name__)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*")  # 初始化 SocketIO
         self.host = host
@@ -35,14 +32,15 @@ class VideoProcessingApp:
         self.data = {}  # 存储接收参数
         self.local_temp_dir = os.path.join(self.app.root_path, 'runs', 'temp')
         self.result_dir = os.path.join(self.app.root_path, 'static', 'results')
+        self.video_dir = os.path.join(self.app.root_path, 'runs', 'video')
         os.makedirs(self.local_temp_dir, exist_ok=True)
         os.makedirs(self.result_dir, exist_ok=True)
+        os.makedirs(self.video_dir, exist_ok=True)
         self.enable_remote_upload = os.getenv("ENABLE_REMOTE_UPLOAD", "1") == "1"
         self.paths = {
-            'download': './runs/video/download.mp4',
-            'output': './runs/video/output.mp4',
-            'camera_output': "./runs/video/camera_output.avi",
-            'video_output': "./runs/video/camera_output.avi"
+            'download': os.path.join(self.video_dir, 'download.mp4'),
+            'video_output': os.path.join(self.video_dir, 'video_output.mp4'),
+            'camera_output': os.path.join(self.video_dir, 'camera_output.mp4')
         }
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.use_half = self.device != "cpu"
@@ -50,8 +48,8 @@ class VideoProcessingApp:
         self.model_ready = set()
         self.recording = False  # 标志位，判断是否正在录制视频
 
+    # 设置所有路由
     def setup_routes(self):
-        """设置所有路由"""
         self.app.add_url_rule('/file_names', 'file_names', self.file_names, methods=['GET'])
         self.app.add_url_rule('/predictImg', 'predictImg', self.predictImg, methods=['POST'])
         self.app.add_url_rule('/predictVideo', 'predictVideo', self.predictVideo)
@@ -69,17 +67,17 @@ class VideoProcessingApp:
         def handle_disconnect():
             print("WebSocket disconnected!")
 
+    # 启动 Flask 应用
     def run(self):
-        """启动 Flask 应用"""
         self.socketio.run(self.app, host=self.host, port=self.port, allow_unsafe_werkzeug=True)
 
+    # 模型列表接口
     def file_names(self):
-        """模型列表接口"""
         weight_items = [{'value': name, 'label': name} for name in self.get_file_names("./weights")]
         return json.dumps({'weight_items': weight_items})
 
+    # 图片预测接口
     def predictImg(self):
-        """图片预测接口"""
         data = request.get_json()
         print(data)
         self.data.clear()
@@ -159,8 +157,8 @@ class VideoProcessingApp:
         
         return json.dumps(self.data, ensure_ascii=False)
 
+    # 视频流处理接口
     def predictVideo(self):
-        """视频流处理接口"""
         self.data.clear()
         self.data.update({
             "username": request.args.get('username'), "weight": request.args.get('weight'),
@@ -176,13 +174,14 @@ class VideoProcessingApp:
         if not cap.isOpened():
             self.emit_task_event(task_id, 'failed', message='无法打开视频文件')
             raise ValueError("无法打开视频文件")
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        fps = int(cap.get(cv2.CAP_PROP_FPS)) or 20
         print(fps)
 
         # 视频写入器
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         video_writer = cv2.VideoWriter(
             self.paths['video_output'],
-            cv2.VideoWriter_fourcc(*'XVID'),
+            fourcc,
             fps,
             (640, 480)
         )
@@ -209,18 +208,17 @@ class VideoProcessingApp:
             finally:
                 self.cleanup_resources(cap, video_writer)
                 self.socketio.emit('message', {'data': '处理完成，正在保存！'})
-                for progress in self.convert_avi_to_mp4(self.paths['video_output']):
-                    self.socketio.emit('progress', {'data': progress})
-                uploadedUrl = self.upload(self.paths['output'])
+                self.socketio.emit('progress', {'data': 100})
+                uploadedUrl = self.upload(self.paths['video_output'])
                 self.data["outVideo"] = uploadedUrl
                 self.save_data(json.dumps(self.data), 'http://localhost:9999/videoRecords')
                 self.emit_task_event(task_id, 'completed', outVideo=uploadedUrl, username=self.data.get("username"))
-                self.cleanup_files([self.paths['download'], self.paths['output'], self.paths['video_output']])
+                self.cleanup_files([self.paths['download'], self.paths['video_output']])
 
         return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+    # 摄像头视频流处理接口
     def predictCamera(self):
-        """摄像头视频流处理接口"""
         self.data.clear()
         self.data.update({
             "username": request.args.get('username'), "weight": request.args.get('weight'),
@@ -254,7 +252,8 @@ class VideoProcessingApp:
         success_msg = f'摄像头已连接 (索引 {camera_index})，开始识别。'
         self.socketio.emit('message', {'data': success_msg})
         self.socketio.emit('camera_status', {'status': 'streaming', 'index': camera_index})
-        video_writer = cv2.VideoWriter(self.paths['camera_output'], cv2.VideoWriter_fourcc(*'XVID'), 20, (640, 480))
+        camera_fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video_writer = cv2.VideoWriter(self.paths['camera_output'], camera_fourcc, 20, (640, 480))
         self.recording = True
 
         def generate():
@@ -280,24 +279,23 @@ class VideoProcessingApp:
                 self.cleanup_resources(cap, video_writer)
                 self.socketio.emit('message', {'data': '处理完成，正在保存！'})
                 self.socketio.emit('camera_status', {'status': 'stopped'})
-                for progress in self.convert_avi_to_mp4(self.paths['camera_output']):
-                    self.socketio.emit('progress', {'data': progress})
-                uploadedUrl = self.upload(self.paths['output'])
+                self.socketio.emit('progress', {'data': 100})
+                uploadedUrl = self.upload(self.paths['camera_output'])
                 self.data["outVideo"] = uploadedUrl
                 print(self.data)
                 self.save_data(json.dumps(self.data), 'http://localhost:9999/cameraRecords')
-                self.cleanup_files([self.paths['download'], self.paths['output'], self.paths['camera_output']])
+                self.cleanup_files([self.paths['download'], self.paths['camera_output']])
 
         return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+    # 停止摄像头预测
     def stopCamera(self):
-        """停止摄像头预测"""
         self.recording = False
         self.socketio.emit('camera_status', {'status': 'stopped'})
         return json.dumps({"status": 200, "message": "预测成功", "code": 0})
 
+    # 列出可用摄像头
     def list_cameras(self):
-        """列出可用摄像头"""
         limit = request.args.get('limit', default=6, type=int)
         cameras, diagnostics = self.discover_cameras(limit=limit)
         payload = {
@@ -317,8 +315,8 @@ class VideoProcessingApp:
             mimetype='application/json'
         )
 
+    # 将结果数据上传到服务器
     def save_data(self, data, path):
-        """将结果数据上传到服务器"""
         headers = {'Content-Type': 'application/json'}
         try:
             response = requests.post(path, data=data, headers=headers)
@@ -326,51 +324,16 @@ class VideoProcessingApp:
         except requests.RequestException as e:
             print(f"上传记录时发生错误: {str(e)}")
 
-    def convert_avi_to_mp4(self, temp_output):
-        """使用 FFmpeg 将 AVI 格式转换为 MP4 格式，并显示转换进度。"""
-        ffmpeg_command = f"ffmpeg -i {temp_output} -vcodec libx264 {self.paths['output']} -y"
-        process = subprocess.Popen(ffmpeg_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                   text=True)
-        total_duration = self.get_video_duration(temp_output)
-
-        for line in process.stderr:
-            if "time=" in line:
-                try:
-                    time_str = line.split("time=")[1].split(" ")[0]
-                    h, m, s = map(float, time_str.split(":"))
-                    processed_time = h * 3600 + m * 60 + s
-                    if total_duration > 0:
-                        progress = (processed_time / total_duration) * 100
-                        yield progress
-                except Exception as e:
-                    print(f"解析进度时发生错误: {e}")
-
-        process.wait()
-        yield 100
-
-    def get_video_duration(self, path):
-        """获取视频总时长（秒）"""
-        try:
-            cap = cv2.VideoCapture(path)
-            if not cap.isOpened():
-                return 0
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            cap.release()
-            return total_frames / fps if fps > 0 else 0
-        except Exception:
-            return 0
-
+    # 获取指定文件夹中的所有文件名
     def get_file_names(self, directory):
-        """获取指定文件夹中的所有文件名"""
         try:
             return [file for file in os.listdir(directory) if os.path.isfile(os.path.join(directory, file))]
         except Exception as e:
             print(f"发生错误: {e}")
             return []
 
+    # 上传处理后的图片或视频文件到远程服务器
     def upload(self, out_path):
-        """上传处理后的图片或视频文件到远程服务器"""
         upload_url = "http://localhost:9999/files/upload"
         try:
             with open(out_path, 'rb') as file:
@@ -384,8 +347,8 @@ class VideoProcessingApp:
         except Exception as e:
             print(f"上传文件时发生错误: {str(e)}")
 
+    # 下载文件并保存到指定路径
     def download(self, url, save_path):
-        """下载文件并保存到指定路径"""
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         try:
             with requests.get(url, stream=True) as response:
@@ -398,29 +361,29 @@ class VideoProcessingApp:
         except requests.RequestException as e:
             print(f"下载失败: {e}")
 
+    # 清理文件
     def cleanup_files(self, file_paths):
-        """清理文件"""
         for path in file_paths:
             if os.path.exists(path):
                 os.remove(path)
 
+    # 释放资源
     def cleanup_resources(self, cap, video_writer):
-        """释放资源"""
         if cap.isOpened():
             cap.release()
         if video_writer is not None:
             video_writer.release()
         cv2.destroyAllWindows()
 
+    # 判断输入路径是否为远程资源
     def is_remote_resource(self, path):
-        """判断输入路径是否为远程资源"""
         if not path:
             return False
         parsed = urlparse(path)
         return parsed.scheme in ('http', 'https')
 
+    # 解析本地图片路径
     def resolve_local_image_path(self, path):
-        """解析本地图片路径"""
         if path.startswith("file://"):
             path = path[7:]
         normalized = os.path.normpath(path)
@@ -428,8 +391,8 @@ class VideoProcessingApp:
             normalized = os.path.abspath(os.path.join(self.app.root_path, normalized))
         return normalized
 
+    # 尝试打开外接或内置摄像头，返回成功的 VideoCapture 实例、索引以及调试信息
     def open_camera(self, preferred=None):
-        """尝试打开外接或内置摄像头，返回成功的 VideoCapture 实例、索引以及调试信息"""
         env_candidate = os.getenv("CAMERA_INDEX")
         candidates = self._build_candidate_indices(preferred_env=env_candidate, preferred_request=preferred)
         fallback = [1, 0] + [idx for idx in range(2, 8)]
@@ -499,8 +462,8 @@ class VideoProcessingApp:
         print("未检测到可用摄像头。")
         return None, None, diagnostics
 
+    # 组合请求参数和环境变量提供的首选摄像头索引
     def _build_candidate_indices(self, preferred_env=None, preferred_request=None):
-        """组合请求参数和环境变量提供的首选摄像头索引"""
         candidates = []
         request_indices = []
         if preferred_request is not None:
@@ -519,8 +482,8 @@ class VideoProcessingApp:
                 candidates.append(idx)
         return candidates
 
+    # 根据平台组装可用的后端选项
     def _get_backend_options(self):
-        """根据平台组装可用的后端选项"""
         backend_options = []
         system = platform.system().lower()
         if system == 'windows':
@@ -536,8 +499,8 @@ class VideoProcessingApp:
         backend_options.append(getattr(cv2, "CAP_ANY", 0))
         return backend_options
 
+    # 探测可用摄像头列表
     def discover_cameras(self, limit=6):
-        """探测可用摄像头列表"""
         backend_options = self._get_backend_options()
         hints = self._get_platform_camera_hints()
         indices = []
@@ -621,52 +584,13 @@ class VideoProcessingApp:
 
         return cameras, diagnostics
 
+    # 为不同平台提供摄像头名称提示
     def _get_platform_camera_hints(self):
-        """为不同平台提供摄像头名称提示"""
-        system = platform.system().lower()
-        hints = {}
-        if system == 'darwin':
-            hints.update(self._list_avfoundation_devices())
-        return hints
+        # 暂时不再依赖 ffmpeg 等外部工具枚举摄像头，统一交给 OpenCV 探测
+        return {}
 
-    def _list_avfoundation_devices(self):
-        """使用 ffmpeg 枚举 macOS 下的 AVFoundation 摄像头"""
-        if not shutil.which("ffmpeg"):
-            return {}
-        try:
-            proc = subprocess.run(
-                ["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False
-            )
-            output = proc.stderr.splitlines()
-            devices_section = False
-            hints = {}
-            pattern = re.compile(r"\[(\d+)]\s+(.*)")
-            for line in output:
-                line = line.strip()
-                if not line:
-                    continue
-                if "AVFoundation video devices" in line:
-                    devices_section = True
-                    continue
-                if "AVFoundation audio devices" in line:
-                    break
-                if devices_section:
-                    match = pattern.search(line)
-                    if match:
-                        idx = int(match.group(1))
-                        name = match.group(2).strip()
-                        hints[idx] = name
-            return hints
-        except Exception as exc:
-            print(f"列出 AVFoundation 摄像头失败: {exc}")
-            return {}
-
+    # 获取已加载的模型或加载新模型，并返回加载耗时
     def get_or_load_model(self, weight_name):
-        """获取已加载的模型或加载新模型，并返回加载耗时"""
         if weight_name in self.model_cache and weight_name in self.model_ready:
             return self.model_cache[weight_name], 0.0
 
@@ -712,8 +636,8 @@ class VideoProcessingApp:
 
         return model, load_duration
 
+    # 异步上传预测结果，避免阻塞响应
     def schedule_async_upload(self, result_path, result_filename):
-        """异步上传预测结果，避免阻塞响应"""
         def _upload():
             uploaded_url = self.upload(result_path)
             if uploaded_url:
@@ -724,8 +648,8 @@ class VideoProcessingApp:
         thread = threading.Thread(target=_upload, name=f"upload-{result_filename}", daemon=True)
         thread.start()
 
+    # 向前端推送任务进度事件
     def emit_task_event(self, task_id, status, **extra):
-        """向前端推送任务进度事件"""
         if not task_id:
             return
         payload = {

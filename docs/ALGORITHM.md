@@ -1,6 +1,6 @@
-# 算法与推理子系统详解（yolo_cropDisease_detection_flask）
+# 算法与推理子系统详解
 
-> 聚焦于 Flask + YOLO 推理服务的整体设计、接口契约、模型管理、视频/摄像头处理、实时事件以及部署调优。
+> （yolo_cropDisease_detection_springboot）聚焦于 Flask + YOLO 推理服务的整体设计、接口契约、模型管理、视频/摄像头处理、实时事件以及部署调优。
 
 ## 1. 技术栈
 - **框架**：Flask 2 + Flask-SocketIO 5（基于 eventlet/WSGI），REST + WebSocket 双通道。
@@ -54,7 +54,7 @@ t└─ train.py             # 预留训练脚本入口
 - `/predictVideo`：
   - 参数通过 query string 传入，服务端将视频下载至 `runs/video/download.mp4`。
   - 使用 OpenCV 分帧，`model.predict(source=frame)` 实时推理。
-  - 将结果写入 `camera_output.avi` 并在处理过程中通过 `yield` + `Response` 推流给前端（若需要）。
+  - 将结果写入 `runs/video/video_output.mp4` 并在处理过程中通过 `yield` + `Response` 推流给前端（若需要）。
   - 结束后触发完成事件，返回输出视频路径。
 - `/predictCamera`：
   - 打开摄像头流或 RTSP，设置 `recording=True` 控制循环，`/stopCamera` 将标志改为 False 以停止处理。
@@ -67,7 +67,7 @@ t└─ train.py             # 预留训练脚本入口
 - **批量权重**：前端可下拉切换，如 `rice_best.pt`、`corn_best.pt`；也可按需上传轻量模型。
 
 ## 7. 事件与任务联动
-- `emit_task_event(taskId, status, **payload)`：包装 SocketIO `emit('task_event', {...})`，前端监听以更新识别任务状态。
+- `emit_task_event(taskId, status, **payload)`：包装 SocketIO `emit('task_progress', {...})`，前端监听以更新识别任务状态。
 - 状态枚举：`processing`（开始）、`completed`（成功）、`failed`（异常）。
 - 附带字段：用户名、作物类别、输出图片/视频 URL、置信度数组、耗时等，可直接同步到任务列表或通知中心。
 

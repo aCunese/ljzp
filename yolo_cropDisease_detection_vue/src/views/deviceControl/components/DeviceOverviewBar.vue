@@ -51,7 +51,7 @@
 			</div>
 			<div class="device-overview-card__meta-item">
 				<el-icon><AlarmClock /></el-icon>
-				<span class="label">上次心跳</span>
+				<span class="label">最近上报</span>
 				<el-tooltip v-if="heartbeatTooltip" :content="heartbeatTooltip" placement="top">
 					<span class="value value--underline">{{ heartbeatText }}</span>
 				</el-tooltip>
@@ -158,8 +158,8 @@ const heartbeatDate = computed(() => {
 });
 
 const heartbeatText = computed(() => {
-	if (!heartbeatDate.value) return '暂无心跳数据';
-	return formatPast(heartbeatDate.value, 'YYYY-mm-dd HH:MM:SS');
+	if (!heartbeatDate.value) return '暂无上报时间';
+	return formatPast(heartbeatDate.value, 'HH:MM');
 });
 
 const heartbeatTooltip = computed(() => {

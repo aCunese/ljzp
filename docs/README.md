@@ -106,7 +106,7 @@ yolo_cropDisease_detection_web/
 
 - **模型管理**：支持多权重共存（默认 `yolo11n.pt`），首次调用时自动加载并缓存至 GPU；根据环境自动选择 CUDA/Half 精度。
 - **输入适配**：可处理本地文件、远程 URL（自动下载缓存）以及 Base64 数据。
-- **任务事件**：通过 SocketIO 向前端推送 `processing/success/failed` 状态，便于做进度提示和失败补救。
+- **任务事件**：通过 SocketIO 向前端推送 `processing/completed/failed` 状态，便于做进度提示和失败补救。
 - **输出存档**：预测结果保存至 `static/results`，并将路径、置信度、标签、耗时等写入数据库供前端展示。
 
 ## 快速上手（本地开发）
@@ -153,7 +153,7 @@ yolo_cropDisease_detection_web/
    hardware.tcp.default-device-id=DEVICE_001
    ```
    可按需为多台设备追加 `hardware.tcp.devices[n].device-id/host/port`。
-2. 前端 `deviceControl` 页面提交 `deviceIds` 数组，后台会逐台记录 `tb_device_control_log`，TCP 发送后等待硬件返回 `OK/ERR` 并自动更新状态。
+2. 前端 `deviceControl` 页面当前通过单设备选择下发指令（`deviceId` 字段），后台会逐台记录 `tb_device_control_log`，TCP 发送后等待硬件返回 `OK/ERR` 并自动更新状态；多设备批量控制已在规划中。
 3. 调用 `GET /api/device/connections` 可实时查看连接是否在线、最近心跳时间，便于在大屏上展示硬件运行状况。
 
 如需容器化，可参考 `QUICKSTART.md` 提供的 docker-compose 示例。

@@ -1,6 +1,6 @@
-# 后端子系统详解（yolo_cropDisease_detection_springboot）
+# 后端子系统详解
 
-> 本文档面向 Java/Spring 工程师，阐述业务中台的架构、模块职责、接口、数据模型与部署要点。
+> （yolo_cropDisease_detection_springboot）本文档面向 Java/Spring 工程师，阐述业务中台的架构、模块职责、接口、数据模型与部署要点。
 
 ## 1. 基础信息
 - **框架**：Spring Boot 2.x、MyBatis-Plus、Lombok、Maven Wrapper。
@@ -40,21 +40,20 @@ com.example.Kcsj
   5. 读取气象缓存 `WeatherService.getDefaultWeatherSnapshot()`，调用 `SolutionService.generateSolution()` 产出 `SolutionRecommendation`。
   6. 将方案结构化数据与时间窗口、限制条件注入响应，供前端展示或落地任务。
 - `GET /flask/file_names`：代理 Flask `/file_names`，列出可选权重。
-- 任务事件：通过 SocketIO（Flask 负责推送）即可同步到前端。
+- 任务事件：Flask 通过 SocketIO `task_progress` 事件将 `processing/completed/failed` 状态同步至前端任务列表。
 
 ### 3.4 防治方案与任务
 - `SolutionController`：
   - `GET /solution/catalog`：查询 `tb_solution_plan` 有效方案，返回病害/作物/药剂组合。
-  - `POST /solution/generate`：支持前端传入 `solutionId` 或 `diseaseId/cropId` + 坐标，内部调用 `SolutionService.generateSolution` 并可指定气象坐标（调用 `WeatherService.refreshForecast`）。
-  - `POST /solution/apply`：将方案绑定识别记录并通过 `TaskService` 创建农事任务。
-- `TaskController`：提供列表、详情、创建、更新、删除、状态切换；支持根据执行人、优先级、时间范围查询。
+  - `POST /solution/generate`：支持前端传入 `diseaseId/cropId` + 坐标，内部调用 `SolutionService.generateSolution` 并可指定气象坐标（调用 `WeatherService.refreshForecast`）。
+- `TaskController`：提供列表、详情、创建、更新、删除、状态切换；`POST /tasks/createFromSolution` 可在选定方案后快速生成任务（暂需前端显式触发，尚未自动串联识别流程）。
 
 ### 3.5 IoT 传感器
 - `SensorController`：
   - `POST /sensor/data|upload|batch`：保存单条或批量传感器数据；若未指定 `deviceId` 使用 `sensor.default-device-id`。
   - `GET /sensor/latest|history|devices`：查询最新/历史数据与设备列表。默认历史范围为近 7 天，可指定 `startTime/endTime`。
-- `SensorService`：校验数据完整性，写入 `sensor_data` 表，并提供按设备/时间范围查询的方法。
-- 结合硬件 TODO 文档，可引入 MQTT Listener 将 `device/sensor/upload/+` Topic 数据转化为 `SensorData`，并实现 `/device/control` 命令转发。
+- `SensorService`：校验数据完整性，写入 `tb_sensor_data` 表，并提供按设备/时间范围查询的方法。
+- 结合硬件 TODO 文档，可引入 MQTT Listener 将 `device/sensor/upload/+` Topic 数据转化为 `SensorData`，并经 `/device/control` 命令转发实现闭环。
 
 ### 3.6 知识库
 - `DiseaseInfoController` / `RemedyController`：基于 `tb_disease_info`、`tb_remedy` 提供查询、创建、导入等接口。
@@ -67,7 +66,7 @@ com.example.Kcsj
 
 ### 3.8 聊天与辅助模块
 - `ChatController`：预留 HTTP/WebSocket 接口，可对接大模型或企业 IM。
-- `DeviceController`：接口占位，待硬件指令下发功能接入。
+- `DeviceController`：已实现 `/device/control|execute|connections`，可联动可选的 TCP 网关和 MQTT 网关，对继电器等设备下发指令并记录回执。
 
 ## 4. 数据层
 - 全部实体位于 `entity/`，采用 MyBatis-Plus 注解映射。

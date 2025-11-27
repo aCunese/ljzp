@@ -1,6 +1,8 @@
-# 前端子系统详解（yolo_cropDisease_detection_vue）
+# 前端子系统详解
 
-> 本文面向前端与全栈工程师，全面拆解可视化子系统的技术栈、目录结构、业务模块以及调试部署方式。
+
+
+> （yolo_cropDisease_detection_vue）本文面向前端与全栈工程师，全面拆解可视化子系统的技术栈、目录结构、业务模块以及调试部署方式。
 
 ## 1. 技术栈与基础设施
 - **运行框架**：Vue 3 + Vite 4 + TypeScript，组合 Element Plus UI、Pinia 状态管理、Vue Router 4、Vue I18n 9。
@@ -33,9 +35,9 @@ src/
 - `stores/tagsViewRoutes.ts`：多标签页缓存，结合 `keepAliveNames` 提升频繁切换性能。
 
 ## 5. 网络层与 API 约定
-- 所有 API 置于 `src/api/*`，方法只负责描述 URL、method、params/body，统一触发 Axios 实例；如 `sensor.ts` 暴露 `fetchSensorDevices/latest/history/summary/trend`。
+- 所有 API 置于 `src/api/*`，方法只负责描述 URL、method、params/body，统一触发 Axios 实例；例如 `sensor.ts` 暴露 `fetchSensorDevices/latest/history`（已落地）以及 `fetchSensorSummary/trend`（对应后端即将补齐的接口，当前会优雅降级）。
 - 上传走 `/api/files/upload`，由 `el-upload` 组件承载，结果写入表单状态供识别或任务模块复用。
-- WebSocket 触达：`socket.io-client` 连接 Flask 服务，订阅 `processing/completed/failed` 事件，在识别记录或任务详情弹出实时提示。
+- WebSocket 触达：`socket.io-client` 连接 Flask 服务，实际订阅 `message`/`progress`/`task_progress` 事件；当算法完成推理后，通过 `task_progress` 将状态推送至任务页面。
 
 ## 6. 核心业务页面
 1. **图像识别（`src/views/imgPredict`）**
@@ -54,9 +56,9 @@ src/
 6. **知识库（`knowledge`、`encyclopedia`）**
    - 结合 `disease`/`remedy` 接口，支持查询病害百科、药剂详情、富文本展示典型症状与治理要点。
 7. **任务与协同（`src/views/task`）**
-   - 列表 + 卡片 + 甘特视图（依赖 `vue-grid-layout`），可关联识别记录编号、负责人、优先级，状态颜色提示。
+   - 目前提供列表视图 + 统计卡，支持 CRUD、派发、状态流转与 WebSocket 实时刷新的执行动态。看板/甘特视图和识别记录联动仍在建设中。
 8. **聊天、设备控制、个人中心**
-   - `chat` 页面通过 WebSocket 接入 LLM 服务（预留）；`deviceControl`（位于 `src/views/deviceControl`）在最新版本中新增“多设备多选框 + TCP 连接状态面板”，调用 `/device/connections` 轮询硬件在线信息，操作时向 `/device/control` 提交 `deviceIds` 数组即可一次下发多台设备。
+   - `chat` 页面通过 WebSocket 接入 LLM 服务（预留）；`deviceControl` 当前基于单设备选择 + TCP/MQTT 指令，实时概览快照/趋势。多设备批量下发与 `/device/connections` 轮询 UI 在硬件批量上线后开放。
    - `personal` 支持修改头像、密码、通知偏好。
 
 ## 7. 设计细节与交互亮点
@@ -71,7 +73,7 @@ src/
 3. 在 `.env.development` 配置：
    ```env
    VITE_API_URL=http://localhost:9999
-   VITE_SOCKET_URL=http://localhost:5001
+   VITE_FLASK_SOCKET_URL=http://localhost:5001
    ```
 4. 生产构建：`npm run build` → `dist/` 产物可由 Nginx/Gateway 提供；推荐启用 gzip 与缓存头。
 
