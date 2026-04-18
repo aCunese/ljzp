@@ -265,6 +265,8 @@ const rules = {
 	costPerUnit: [{ required: true, message: '请输入单价', trigger: 'blur' }],
 };
 
+const isSuccessCode = (code: unknown) => code === 0 || code === '0';
+
 // 格式化日期
 const formatDate = (dateStr: string) => {
 	if (!dateStr) return '-';
@@ -280,7 +282,7 @@ const loadData = async () => {
 			pageSize: pageSize.value,
 			...searchForm,
 		});
-		if (res.code === '0') {
+		if (isSuccessCode(res.code)) {
 			tableData.value = res.data.records;
 			total.value = res.data.total;
 		} else {
@@ -333,7 +335,7 @@ const handleDelete = (row: Remedy) => {
 		.then(async () => {
 			try {
 				const res: any = await deleteRemedy(row.id!);
-				if (res.code === '0') {
+				if (isSuccessCode(res.code)) {
 					ElMessage.success('删除成功');
 					loadData();
 				} else {
@@ -360,7 +362,7 @@ const handlePriceSubmit = async () => {
 	priceLoading.value = true;
 	try {
 		const res: any = await updateRemedyPrice(currentRemedy.value.id!, newPrice.value);
-		if (res.code === '0') {
+		if (isSuccessCode(res.code)) {
 			ElMessage.success('价格更新成功');
 			priceDialogVisible.value = false;
 			loadData();
@@ -387,7 +389,7 @@ const handleSubmit = async () => {
 				? await updateRemedy(form.id!, form)
 				: await createRemedy(form);
 
-			if (res.code === '0') {
+			if (isSuccessCode(res.code)) {
 				ElMessage.success(isEdit.value ? '更新成功' : '新增成功');
 				dialogVisible.value = false;
 				loadData();
@@ -465,4 +467,3 @@ onMounted(() => {
 	}
 }
 </style>
-

@@ -1,415 +1,331 @@
-# 快速启动指南
+# 快速启动指南（本地开发）
 
-## 第二阶段：智能防治方案与 LLM 集成
+> 目标：用当前仓库的真实配置，在本机启动前端 + 后端 + Flask 推理服务。  
+> 本文已按当前代码校准：前端默认 `8888`，后端 `9999`（上下文 `/api`），Flask `5001`。
 
-### 前置条件
+## 1. 环境要求
 
-- Java 1.8+
-- Node.js 14+
-- MySQL 8.0+
-- Python 3.8+ (Flask服务)
+- Node.js `>=16`（前端 `package.json` 要求）
+- npm `>=7`
+- Java `8+`（建议 Java 17，本项目可正常运行）
+- Python `3.8+`
+- MySQL `8.0+`
 
----
-
-## 0. 一键启动三端（推荐）
-
-在仓库根目录执行：
+可先执行：
 
 ```bash
-chmod +x start_all.sh   # 首次运行需要赋权
-./start_all.sh
+node -v
+npm -v
+java -version
+python3 --version
+mysql --version
 ```
 
-脚本会自动：
-- 检查/安装前端 `node_modules`、Flask `.venv` 依赖（首次运行或使用 `--install-deps` 时）
-- 并行启动 Vue (`npm run dev`)、Spring Boot (`./mvnw spring-boot:run`) 与 Flask (`.venv/bin/python main.py`)
-- 将输出分别写入 `.devlogs/frontend.log`、`.devlogs/backend.log`、`.devlogs/flask.log`
+## 2. 一次性准备数据库
 
-常用参数：
-- `./start_all.sh --install-deps` 强制重新安装三端依赖
-- `./start_all.sh --skip-frontend`/`--skip-backend`/`--skip-flask` 按需跳过某端
+在项目根目录 `njzp.tech` 下执行以下 SQL。
 
-环境变量覆盖：
-- `FRONTEND_CMD="npm run dev -- --host 0.0.0.0"` 自定义前端启动命令
-- `BACKEND_CMD="./mvnw spring-boot:run -Dspring.profiles.active=dev"`
-- `FLASK_CMD="/usr/local/bin/python main.py"`
-- `PYTHON_BIN="/opt/homebrew/bin/python3"` 指定创建虚拟环境使用的 Python
+### 2.1 创建数据库
 
-按 `Ctrl+C` 可一次性关闭全部进程；单独查看日志可运行 `tail -f .devlogs/backend.log` 等命令。
-
----
-
-## 一、数据库初始化
-
-### 1. 导入传感器数据表
-
-```bash
-# 连接到MySQL数据库
-mysql -u root -p
-
-# 选择数据库
-use cropdisease;
-
-# 导入表结构
-source sensor_data_schema.sql;
-
-# 导入测试数据（7天历史数据）
-source sensor_data_test_data.sql;
-
-# 验证数据
-SELECT COUNT(*) FROM tb_sensor_data;
-# 应该返回 169 条记录
+```sql
+CREATE DATABASE IF NOT EXISTS cropdisease
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+USE cropdisease;
 ```
 
----
+### 2.2 初始化基础表（推荐）
 
-## 二、后端启动
+仓库已有硬件相关 DDL，先导入：
 
-### 1. 配置文件检查
+```sql
+SOURCE hardware_tables.sql;
+```
 
-确认 `application.properties` 配置正确：
+再补齐核心业务表（首次本地搭建建议执行）：
+
+```sql
+CREATE TABLE IF NOT EXISTS `tb_user` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `username` VARCHAR(100) NOT NULL,
+  `password` VARCHAR(255) NOT NULL,
+  `name` VARCHAR(100) DEFAULT NULL,
+  `sex` VARCHAR(10) DEFAULT NULL,
+  `email` VARCHAR(150) DEFAULT NULL,
+  `tel` VARCHAR(50) DEFAULT NULL,
+  `role` VARCHAR(50) DEFAULT NULL,
+  `avatar` VARCHAR(512) DEFAULT NULL,
+  `time` DATETIME DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_tb_user_username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `tb_img_records` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `weight` VARCHAR(100) DEFAULT NULL,
+  `input_img` TEXT,
+  `out_img` TEXT,
+  `confidence` VARCHAR(255) DEFAULT NULL,
+  `all_time` VARCHAR(100) DEFAULT NULL,
+  `conf` VARCHAR(100) DEFAULT NULL,
+  `label` VARCHAR(255) DEFAULT NULL,
+  `username` VARCHAR(100) DEFAULT NULL,
+  `kind` VARCHAR(100) DEFAULT NULL,
+  `start_time` VARCHAR(100) DEFAULT NULL,
+  `task_id` INT DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `tb_video_records` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `weight` VARCHAR(100) DEFAULT NULL,
+  `input_video` TEXT,
+  `out_video` TEXT,
+  `conf` VARCHAR(100) DEFAULT NULL,
+  `username` VARCHAR(100) DEFAULT NULL,
+  `kind` VARCHAR(100) DEFAULT NULL,
+  `start_time` VARCHAR(100) DEFAULT NULL,
+  `task_id` INT DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `tb_camera_records` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `weight` VARCHAR(100) DEFAULT NULL,
+  `out_video` TEXT,
+  `conf` VARCHAR(100) DEFAULT NULL,
+  `username` VARCHAR(100) DEFAULT NULL,
+  `kind` VARCHAR(100) DEFAULT NULL,
+  `start_time` VARCHAR(100) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `disease_knowledge_data` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `disease_code` VARCHAR(64) DEFAULT NULL,
+  `disease_name` VARCHAR(128) NOT NULL,
+  `crop_id` BIGINT DEFAULT NULL,
+  `crop_name` VARCHAR(64) DEFAULT NULL,
+  `description` TEXT,
+  `symptom_summary` TEXT,
+  `pathogen_type` VARCHAR(64) DEFAULT NULL,
+  `risk_level` VARCHAR(32) DEFAULT NULL,
+  `climate_risk_factors` VARCHAR(255) DEFAULT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_disease_crop` (`crop_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `tb_remedy` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `remedy_code` VARCHAR(64) DEFAULT NULL,
+  `remedy_name` VARCHAR(128) NOT NULL,
+  `active_ingredient` VARCHAR(128) DEFAULT NULL,
+  `target_pathogen` VARCHAR(128) DEFAULT NULL,
+  `formulation` VARCHAR(64) DEFAULT NULL,
+  `safe_dosage` DECIMAL(10,2) DEFAULT NULL,
+  `dosage_unit` VARCHAR(32) DEFAULT NULL,
+  `interval_days` INT DEFAULT NULL,
+  `application_method` VARCHAR(128) DEFAULT NULL,
+  `safety_interval_days` INT DEFAULT NULL,
+  `max_applications_per_season` INT DEFAULT NULL,
+  `caution` TEXT,
+  `cost_per_unit` DECIMAL(10,2) DEFAULT NULL,
+  `currency` VARCHAR(16) DEFAULT 'CNY',
+  `last_price_update` DATETIME DEFAULT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `tb_solution` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `disease_id` BIGINT DEFAULT NULL,
+  `crop_id` BIGINT DEFAULT NULL,
+  `crop_name` VARCHAR(64) DEFAULT NULL,
+  `remedy_id` BIGINT DEFAULT NULL,
+  `recommended_dosage` DECIMAL(10,2) DEFAULT NULL,
+  `dosage_unit` VARCHAR(32) DEFAULT NULL,
+  `application_stage` VARCHAR(64) DEFAULT NULL,
+  `application_timing` VARCHAR(128) DEFAULT NULL,
+  `notes` TEXT,
+  `weather_constraints` TEXT,
+  `expected_cost` DECIMAL(10,2) DEFAULT NULL,
+  `status` VARCHAR(32) DEFAULT 'ACTIVE',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `tb_farm_task` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `field_id` BIGINT DEFAULT NULL,
+  `task_type` VARCHAR(64) DEFAULT NULL,
+  `plan_start_time` DATETIME DEFAULT NULL,
+  `plan_end_time` DATETIME DEFAULT NULL,
+  `solution_id` BIGINT DEFAULT NULL,
+  `record_id` BIGINT DEFAULT NULL,
+  `actual_dosage` DECIMAL(10,2) DEFAULT NULL,
+  `actual_area` DECIMAL(10,2) DEFAULT NULL,
+  `executor_id` INT DEFAULT NULL,
+  `status` VARCHAR(32) DEFAULT 'PENDING',
+  `resource_usage` TEXT,
+  `description` TEXT,
+  `feedback_text` TEXT,
+  `feedback_images` TEXT,
+  `progress_updated_at` DATETIME DEFAULT NULL,
+  `completed_at` DATETIME DEFAULT NULL,
+  `archived_at` DATETIME DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `tb_task_knowledge_relation` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `task_id` BIGINT DEFAULT NULL,
+  `disease_id` BIGINT DEFAULT NULL,
+  `crop_id` BIGINT DEFAULT NULL,
+  `remedy_id` BIGINT DEFAULT NULL,
+  `relation_type` VARCHAR(64) DEFAULT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### 2.3 导入仓库种子数据
+
+```sql
+SOURCE disease_knowledge_data.sql;
+```
+
+### 2.4 创建默认管理员账号（若不存在）
+
+```sql
+INSERT INTO tb_user (username, password, name, role, time)
+SELECT 'admin', 'admin123', '管理员', 'admin', NOW()
+WHERE NOT EXISTS (
+  SELECT 1 FROM tb_user WHERE username = 'admin'
+);
+```
+
+## 3. 配置后端连接信息
+
+编辑文件：`yolo_cropDisease_detection_springboot/src/main/resources/application.properties`
+
+至少确认：
 
 ```properties
-# 数据库配置
 spring.datasource.url=jdbc:mysql://localhost:3306/cropdisease?serverTimezone=Asia/Shanghai
 spring.datasource.username=root
-spring.datasource.password=你的密码
-
-# 讯飞星火配置（可选，暂时使用模拟模式）
-llm.spark.app-id=YOUR_APP_ID
-llm.spark.api-key=YOUR_API_KEY
-llm.spark.api-secret=YOUR_API_SECRET
+spring.datasource.password=你的MySQL密码
+server.port=9999
+server.servlet.context-path=/api
 ```
 
-### 2. 启动Spring Boot应用
+提示：当前仓库 `application.properties` 含敏感配置（数据库口令、LLM Key），建议你本地改为自己的值，并避免把真实密钥提交到仓库。
+
+## 4. 启动方式 A：一键启动（推荐）
+
+在 `njzp.tech` 根目录执行：
+
+```bash
+chmod +x start_all.sh
+./start_all.sh --install-deps
+```
+
+说明：
+- 会并行启动三端：前端 + 后端 + Flask。
+- 日志在 `.devlogs/frontend.log`、`.devlogs/backend.log`、`.devlogs/flask.log`。
+- 关闭时直接 `Ctrl+C`。
+
+## 5. 启动方式 B：手动分端启动
+
+### 5.1 启动后端（Spring Boot）
 
 ```bash
 cd yolo_cropDisease_detection_springboot
-
-# 方式1：使用Maven
-mvn clean install
 ./mvnw spring-boot:run
-# 方式2：使用IDE
-# 直接运行 com.example.Kcsj.Kcsj 主类
 ```
 
-**启动成功标志**：
-```
-Started Kcsj in 15.xxx seconds (JVM running for xx.xxx)
+Windows：
+
+```powershell
+cd yolo_cropDisease_detection_springboot
+.\mvnw.cmd spring-boot:run
 ```
 
-**端口**：`http://localhost:9999`
-
-### 3. 启动Flask推理服务（如果未启动）
+### 5.2 启动推理服务（Flask）
 
 ```bash
 cd yolo_cropDisease_detection_flask
-
-#mac进入虚拟环境中
--m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
 python main.py
 ```
 
-**端口**：`http://localhost:5001`
+Windows：
 
----
+```powershell
+cd yolo_cropDisease_detection_flask
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+python main.py
+```
 
-## 三、前端启动
+### 5.3 启动前端（Vue3 + Vite）
 
 ```bash
 cd yolo_cropDisease_detection_vue
-
-# 安装依赖（首次运行）
 npm install
-
-# 启动开发服务器
-npm run serve
+npm run dev
 ```
 
-**访问地址**：`http://localhost:8080`
+## 6. 启动后访问地址
 
----
+- 前端首页：`http://localhost:8888`
+- 后端健康检查（示例接口）：`http://localhost:9999/api/sensor/latest`
+- Flask 服务：`http://localhost:5001`
 
-## 四、功能测试
+## 7. 联调快速自检
 
-### 1. 传感器数据监控
-
-**路径**：`http://localhost:8080/sensor`
-
-**功能**：
-- 查看实时环境数据（温度、湿度、土壤墒情、光照、CO2）
-- 查看历史趋势图表（可选择1天/3天/7天）
-- 手动刷新数据
-
-**API测试**：
 ```bash
-# 查询最新数据
+# 后端接口
 curl http://localhost:9999/api/sensor/latest
 
-# 推送新数据
-curl -X POST http://localhost:9999/api/sensor/data \
-  -H "Content-Type: application/json" \
-  -d '{
-    "deviceId": "DEVICE_001",
-    "temperature": 25.5,
-    "humidity": 68.0,
-    "soilMoisture": 45.0,
-    "lightIntensity": 35000.0,
-    "co2Level": 420.0
-  }'
+# Flask 权重列表
+curl http://localhost:5001/file_names
 ```
 
-### 2. 智能问答助手
+若两条命令都能返回 JSON，通常说明后端和 Flask 已正常运行。
 
-**路径**：`http://localhost:8080/chat`
+## 8. 常见问题
 
-**功能**：
-- 实时聊天对话（WebSocket）
-- 流式输出（逐字显示）
-- 多轮对话（上下文记忆）
-- 快捷问题按钮
+### 8.1 前端打不开（`localhost:8888`）
 
-**快捷问题**：
-- "如何防治玉米疫病？"
-- "什么时候施药最合适？"
-- "如何查看传感器数据？"
-- "气象条件对施药有什么影响？"
+- 确认执行的是 `npm run dev`（不是 `npm run serve`）。
+- 检查 `yolo_cropDisease_detection_vue/.env` 中 `VITE_PORT` 是否改过。
 
-**API测试**：
-```bash
-# HTTP方式发送消息
-curl -X POST http://localhost:9999/api/chat/send \
-  -H "Content-Type: application/json" \
-  -d '{
-    "sessionId": "test_session",
-    "message": "如何防治玉米疫病？"
-  }'
-```
+### 8.2 后端启动报数据库错误
 
-### 3. 图像识别 + 智能方案
+- 检查 `application.properties` 中账号密码。
+- 确认已执行第 2 节 SQL（尤其是 `tb_user`、`tb_img_records`、`tb_video_records`、`tb_camera_records`、`tb_sensor_data`）。
 
-**路径**：`http://localhost:8080/imgPredict`
+### 8.3 图像识别报错或超时
 
-**功能**：
-- 上传图片识别病害
-- 自动生成防治方案
-- 推荐施药时间窗口
-- 气象因素分析
+- 先单独启动 Flask 并观察控制台日志。
+- 首次加载 YOLO 权重较慢，属于正常现象。
+- 如未使用 GPU，可先用轻量权重并减少并发请求。
 
-**测试流程**：
-1. 选择作物类型（玉米/水稻/番茄/草莓）
-2. 上传病害图片
-3. 点击识别按钮
-4. 查看识别结果和防治方案
-
-**响应示例**：
-```json
-{
-  "label": ["blight（疫病）"],
-  "confidence": ["70.56%"],
-  "solutionRecommendation": {
-    "diseaseName": "玉米疫病",
-    "remedyName": "甲霜·锰锌 72% WP",
-    "recommendedDosage": 150.0,
-    "recommendedTimeWindows": [
-      "今日 16:00-18:00",
-      "今日 18:00-20:00",
-      "明日 07:00-09:00"
-    ],
-    "applicationRestrictions": {
-      "温度": "当前气温 25.0℃，适宜施药",
-      "湿度": "当前湿度 68%，适宜",
-      "风速": "当前风速 3.5 m/s，可以施药",
-      "降雨": "未来降雨概率 10%，适宜",
-      "推荐时段": "早上7-10点或傍晚16-19点"
-    }
-  }
-}
-```
-
----
-
-## 五、LLM真实API接入（可选）
-
-### 1. 获取讯飞星火API密钥
-
-访问：https://xinghuo.xfyun.cn/
-
-注册账号并创建应用，获取：
-- AppId
-- ApiKey
-- ApiSecret
-
-### 2. 修改配置
-
-编辑 `application.properties`：
-
-```properties
-llm.spark.app-id=你的AppId
-llm.spark.api-key=你的ApiKey
-llm.spark.api-secret=你的ApiSecret
-llm.spark.wss-url=wss://spark-api.xf-yun.com/v3.5/chat
-llm.spark.model-version=v3.5
-```
-
-### 3. 重启Spring Boot应用
-
-配置完成后重启应用，系统会自动切换到真实AI模式。
-
-**验证方式**：
-- 在聊天界面发送消息
-- 查看后端日志，应该显示"调用讯飞星火API"而不是"返回模拟响应"
-
----
-
-## 六、常见问题
-
-### Q1: 数据库连接失败
-
-**错误**：`Communications link failure`
-
-**解决**：
-- 检查MySQL是否启动
-- 确认用户名密码正确
-- 检查防火墙设置
-
-### Q2: Flask服务无法访问
-
-**错误**：`Connection refused: connect`
-
-**解决**：
-```bash
-# 确认Flask服务已启动
-cd yolo_cropDisease_detection_flask
-python main.py
-
-# 检查端口占用
-netstat -ano | findstr 5001
-```
-
-### Q3: WebSocket连接失败
-
-**错误**：`WebSocket连接失败`
-
-**解决**：
-- 检查浏览器是否支持WebSocket
-- 清除浏览器缓存
-- 确认后端应用正常运行
-
-### Q4: 图表不显示
-
-**解决**：
-- 确认已导入测试数据
-- 检查浏览器控制台是否有JavaScript错误
-- 刷新页面
-
-### Q5: 传感器数据为空
-
-**解决**：
-```bash
-# 手动导入测试数据
-mysql -u root -p cropdisease < sensor_data_test_data.sql
-
-# 验证数据
-mysql -u root -p -e "SELECT COUNT(*) FROM cropdisease.tb_sensor_data;"
-```
-
----
-
-## 七、API接口速查
-
-### 传感器数据
-
-| 方法 | 端点 | 说明 |
-|------|------|------|
-| POST | `/api/sensor/data` | 接收传感器数据 |
-| GET | `/api/sensor/latest` | 查询最新数据 |
-| GET | `/api/sensor/history` | 查询历史数据 |
-| POST | `/api/sensor/batch` | 批量接收数据 |
-
-### 聊天接口
-
-| 方法 | 端点 | 说明 |
-|------|------|------|
-| POST | `/api/chat/send` | HTTP发送消息 |
-| WebSocket | `/api/chat/ws` | WebSocket连接 |
-| GET | `/api/chat/history/{sessionId}` | 查询历史 |
-| DELETE | `/api/chat/history/{sessionId}` | 清空历史 |
-
-### 图像识别
-
-| 方法 | 端点 | 说明 |
-|------|------|------|
-| POST | `/flask/predict` | 识别图像并生成方案 |
-| GET | `/flask/file_names` | 获取权重文件列表 |
-
----
-
-## 八、性能监控
-
-### 后端监控
+## 9. 你最常用的一套命令（复制即用）
 
 ```bash
-# 查看日志
-tail -f yolo_cropDisease_detection_springboot/logs/spring-boot.log
+cd /你的路径/njzp.tech
 
-# 监控内存使用
-jps -l
-jstat -gc [PID] 1000
+# 只需首次执行一次（后续仅改配置或更新数据时再做）
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS cropdisease DEFAULT CHARSET utf8mb4;"
+
+# 推荐一键启动
+./start_all.sh --install-deps
 ```
-
-### 数据库监控
-
-```sql
--- 查询传感器数据量
-SELECT COUNT(*) FROM tb_sensor_data;
-
--- 查询最新10条数据
-SELECT * FROM tb_sensor_data ORDER BY timestamp DESC LIMIT 10;
-
--- 查询数据统计
-SELECT 
-  MIN(timestamp) AS 最早时间,
-  MAX(timestamp) AS 最新时间,
-  AVG(temperature) AS 平均温度,
-  AVG(humidity) AS 平均湿度
-FROM tb_sensor_data;
-```
-
----
-
-## 九、下一步
-
-### 功能扩展
-
-1. **真实传感器接入**：
-   - 配置物联网设备推送地址为 `http://your-server:9999/api/sensor/data`
-   - 设置数据推送频率（建议5-10分钟一次）
-
-2. **施药提醒**：
-   - 根据时间窗口推送施药提醒
-   - 集成企业微信/钉钉通知
-
-3. **方案优化**：
-   - 收集用户反馈
-   - 优化施药时间窗口算法
-
-### 性能优化
-
-1. **Redis缓存**：
-   - 缓存聊天会话上下文
-   - 缓存气象数据
-
-2. **数据库优化**：
-   - 定期清理历史数据（保留90天）
-   - 添加更多索引
-
-3. **前端优化**：
-   - 图表数据懒加载
-   - 聊天消息分页
-
----
-
-**祝您使用愉快！如有问题，请查看《第二阶段实施总结.md》获取详细信息。**
-

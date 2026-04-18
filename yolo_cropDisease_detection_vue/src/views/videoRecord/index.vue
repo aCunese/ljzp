@@ -41,7 +41,7 @@
 				<el-table-column prop="inputVideo" label="原视频" width="220" align="center">
 					<template #default="scope">
 						<div class="media-box">
-							<video class="media-box__player" controls :key="scope.row.inputVideo + uniqueKey">
+							<video class="media-box__player" controls :key="`${scope.row.inputVideo ?? 'input'}-${uniqueKey}`">
 								<source :src="scope.row.inputVideo" type="video/mp4" />
 							</video>
 						</div>
@@ -50,7 +50,7 @@
 				<el-table-column prop="outVideo" label="识别结果" width="220" align="center">
 					<template #default="scope">
 						<div class="media-box">
-							<video class="media-box__player" preload="auto" controls :key="scope.row.outVideo + uniqueKey">
+							<video class="media-box__player" preload="auto" controls :key="`${scope.row.outVideo ?? 'output'}-${uniqueKey}`">
 								<source :src="scope.row.outVideo" type="video/mp4" />
 							</video>
 						</div>

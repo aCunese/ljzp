@@ -15,7 +15,7 @@
 										:show-file-list="false"
 										:on-success="handleAvatarSuccess"
 									>
-										<img v-if="imageUrl" :src="imageUrl" class="avatar" />
+										<img v-if="imageUrl" :src="imageUrl" class="avatar" @error="handleAvatarLoadError" />
 										<el-icon v-else><Plus /></el-icon>
 									</el-upload>
 								</div>
@@ -75,10 +75,23 @@ import { Plus } from '@element-plus/icons-vue';
 
 const imageUrl = ref('');
 const uploadFile = ref<UploadInstance>();
+const DEFAULT_AVATAR = 'https://wpimg.wallstcn.com/f778738c-e4f8-4870-b634-56703b4acafe.gif';
+
+const normalizeAvatar = (avatar?: string | null) => {
+	if (typeof avatar === 'string' && avatar.trim()) {
+		return avatar;
+	}
+	return DEFAULT_AVATAR;
+};
 
 const handleAvatarSuccess: UploadProps['onSuccess'] = (response, uploadFile) => {
 	imageUrl.value = URL.createObjectURL(uploadFile.raw!);
 	state.form.avatar = response.data;
+};
+
+const handleAvatarLoadError = () => {
+	imageUrl.value = DEFAULT_AVATAR;
+	state.form.avatar = DEFAULT_AVATAR;
 };
 
 const state = reactive({
@@ -106,10 +119,13 @@ const loadProfile = () => {
 		if (res.code === 0) {
 			state.form = res.data;
 			state.form.role = mapRoleToLabel(state.form.role);
+			state.form.avatar = normalizeAvatar(state.form.avatar);
 			imageUrl.value = state.form.avatar;
 		} else {
 			ElMessage.error(res.msg);
 		}
+	}).catch(() => {
+		imageUrl.value = DEFAULT_AVATAR;
 	});
 };
 

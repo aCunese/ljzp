@@ -15,6 +15,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import javax.annotation.Resource;
 import java.util.Date;
@@ -114,6 +115,9 @@ public class PredictionController {
         }
 
         try {
+            // 前端示例图常使用 /api/files/... 相对路径，先转换为可被 Flask 下载的绝对 URL
+            normalizeInputImageUrl(request);
+
             // 创建请求体
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -192,6 +196,29 @@ public class PredictionController {
         } catch (Exception e) {
             return Result.error("-1", "Error: " + e.getMessage());
         }
+    }
+
+    private void normalizeInputImageUrl(PredictRequest request) {
+        String inputImg = request.getInputImg();
+        if (inputImg == null || inputImg.startsWith("http://") || inputImg.startsWith("https://")) {
+            return;
+        }
+
+        if (!inputImg.startsWith("/")) {
+            return;
+        }
+
+        String contextBase = ServletUriComponentsBuilder.fromCurrentContextPath()
+                .replacePath(null)
+                .build()
+                .toUriString();
+
+        String normalizedPath = inputImg;
+        if (contextBase.endsWith("/api") && inputImg.startsWith("/api/")) {
+            normalizedPath = inputImg.substring(4);
+        }
+
+        request.setInputImg(contextBase + normalizedPath);
     }
 
     @GetMapping("/file_names")

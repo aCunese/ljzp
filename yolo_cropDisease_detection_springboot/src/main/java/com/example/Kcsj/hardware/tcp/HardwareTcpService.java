@@ -92,11 +92,7 @@ public class HardwareTcpService implements HardwareTcpGateway {
         private final String host;
         private final int port;
 
-        private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "hardware-tcp-" + deviceId);
-            t.setDaemon(true);
-            return t;
-        });
+        private final ExecutorService executor;
 
         private final AtomicBoolean running = new AtomicBoolean(false);
         private final AtomicReference<Long> pendingLogId = new AtomicReference<>();
@@ -111,6 +107,11 @@ public class HardwareTcpService implements HardwareTcpGateway {
             this.deviceId = deviceId;
             this.host = host;
             this.port = port;
+            this.executor = Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "hardware-tcp-" + this.deviceId);
+                t.setDaemon(true);
+                return t;
+            });
         }
 
         void start() {

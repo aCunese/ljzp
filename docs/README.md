@@ -73,7 +73,7 @@
 ## 目录结构概览
 
 ```
-yolo_cropDisease_detection_web/
+njzp.tech/
 ├─ yolo_cropDisease_detection_vue/       # Vue3 前端
 │  ├─ src/views/sensor/                  # 传感器可视化
 │  ├─ src/views/solution/                # 智能方案页面
@@ -88,18 +88,18 @@ yolo_cropDisease_detection_web/
 │  ├─ predict/                           # 图像推理封装
 │  └─ weights/、runs/、static/           # 模型权重与输出
 ├─ disease_knowledge_data.sql            # 病害知识初始化数据
-├─ remedy_solution_seed.sql              # 防治方案与经济指标
-├─ farm_task_data.sql                    # 农事任务样例
-└─ QUICKSTART.md                         # 部署详情与 FAQ
+├─ hardware_tables.sql                   # 传感器与设备控制表结构
+├─ start_all.sh                          # 一键启动脚本
+└─ docs/QUICKSTART.md                    # 启动与排障说明
 ```
 
 ## 数据库与业务模型
 
-- **病害知识**：`tb_disease_info` 记录作物、病害名称、症状描述、风险等级等，用于知识展示与方案生成。
+- **病害知识**：`disease_knowledge_data` 记录作物、病害名称、症状描述、风险等级等，用于知识展示与方案生成。
 - **解决方案**：`tb_solution`、`tb_remedy` 存储防治策略、药剂成分、成本与执行步骤，可与识别结果或农事任务关联。
 - **传感器数据**：`tb_sensor_data` 支持实时上报与历史查询，前端进行图表渲染。
 - **农事任务**：`tb_farm_task` 包含任务类型、执行人、节点时间、状态等，支撑调度与提醒。
-- **识别记录**：`imgrecords`、`videorecords`、`camerarecords` 追溯各类推理结果并支持二次分析。
+- **识别记录**：`tb_img_records`、`tb_video_records`、`tb_camera_records` 追溯各类推理结果并支持二次分析。
 
 
 ## AI 推理服务设计
@@ -111,37 +111,25 @@ yolo_cropDisease_detection_web/
 
 ## 快速上手（本地开发）
 
-1. **数据库初始化**
+推荐直接看 `docs/QUICKSTART.md`，该文档已按当前仓库实际配置校准（可直接执行）。
+
+最短路径如下：
+
+1. **初始化数据库（首次）**
+   - 创建 `cropdisease` 数据库。
+   - 导入 `hardware_tables.sql`（传感器与设备控制表）。
+   - 补齐核心业务表并导入 `disease_knowledge_data.sql`（详见 `docs/QUICKSTART.md`）。
+2. **一键启动三端（推荐）**
    ```bash
-   mysql -u root -p
-   CREATE DATABASE cropdisease CHARACTER SET utf8mb4;
-   SOURCE disease_knowledge_data.sql;
-   SOURCE remedy_solution_seed.sql;
-   SOURCE farm_task_data.sql;
+   chmod +x start_all.sh
+   ./start_all.sh --install-deps
    ```
-2. **启动中台服务**
-   ```bash
-   cd yolo_cropDisease_detection_springboot
-   .\mvnw.cmd -DskipTests spring-boot:run
-   # 默认端口 http://localhost:9999
-   ```
-3. **启动推理服务**
-   ```bash
-   cd ..\yolo_cropDisease_detection_flask
-   python -m venv venv && venv\Scripts\activate
-   pip install -r requirements.txt
-   python main.py        # 默认端口 http://localhost:5001
-   ```
-4. **启动前端可视化**
-   ```bash
-   cd ..\yolo_cropDisease_detection_vue
-   npm install
-   npm run serve         # http://localhost:8080
-   ```
-5. **访问系统**
-   - 使用浏览器打开 `http://localhost:8080`。
-   - 登录默认管理员账号（可在数据库 `user` 表中查看或自定义）。
-   - 体验传感器大屏、识别任务与智能方案等模块。
+3. **访问系统**
+   - 前端：`http://localhost:8888`
+   - 后端：`http://localhost:9999/api`
+   - Flask：`http://localhost:5001`
+4. **默认账号**
+   - 建议创建：`admin / admin123`（对应 `tb_user` 表）。
 
 ### 硬件控制配置
 
@@ -156,7 +144,7 @@ yolo_cropDisease_detection_web/
 2. 前端 `deviceControl` 页面当前通过单设备选择下发指令（`deviceId` 字段），后台会逐台记录 `tb_device_control_log`，TCP 发送后等待硬件返回 `OK/ERR` 并自动更新状态；多设备批量控制已在规划中。
 3. 调用 `GET /api/device/connections` 可实时查看连接是否在线、最近心跳时间，便于在大屏上展示硬件运行状况。
 
-如需容器化，可参考 `QUICKSTART.md` 提供的 docker-compose 示例。
+完整排障与分端启动命令请参考 `docs/QUICKSTART.md`。
 
 ## 常见问题
 
@@ -174,4 +162,4 @@ yolo_cropDisease_detection_web/
 
 ---
 
-如需二次开发或部署支持，可先阅读 `yolo_cropDisease_detection_springboot/README.md`、`QUICKSTART.md` 获取更细节的环境配置与调试指南。
+如需二次开发或部署支持，可先阅读 `yolo_cropDisease_detection_springboot/README.md`、`docs/QUICKSTART.md` 获取更细节的环境配置与调试指南。

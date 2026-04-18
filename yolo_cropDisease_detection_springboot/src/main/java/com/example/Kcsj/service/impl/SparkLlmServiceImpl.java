@@ -22,6 +22,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
+import java.util.TimeZone;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -66,6 +67,10 @@ public class SparkLlmServiceImpl implements SparkLlmService {
                     .timestamp(LocalDateTime.now())
                     .build();
         } catch (Exception e) {
+            if (isSparkAuthFailure(e)) {
+                log.warn("讯飞星火鉴权失败（401），自动回退到本地应急回复模式。请检查 appId/apiKey/apiSecret 与接口权限是否匹配。");
+                return buildMockResponse(request);
+            }
             log.error("调用讯飞星火API失败", e);
             return LlmChatResponse.builder()
                     .sessionId(request.getSessionId())
@@ -90,6 +95,11 @@ public class SparkLlmServiceImpl implements SparkLlmService {
 
             callSparkWebSocketStream(request, callback);
         } catch (Exception e) {
+            if (isSparkAuthFailure(e)) {
+                log.warn("讯飞星火流式鉴权失败（401），自动回退到本地流式回复模式。");
+                simulateStreamResponse(request, callback);
+                return;
+            }
             log.error("处理流式响应失败", e);
             callback.onError(e);
         }
@@ -218,7 +228,7 @@ public class SparkLlmServiceImpl implements SparkLlmService {
 
             @Override
             public void onFailure(WebSocket webSocket, Throwable t, Response response) {
-                errorRef.compareAndSet(null, t instanceof Exception ? (Exception) t : new IOException(t));
+                errorRef.compareAndSet(null, buildWsFailureException(t, response));
                 if (completed.compareAndSet(false, true)) {
                     latch.countDown();
                 }
@@ -269,9 +279,8 @@ public class SparkLlmServiceImpl implements SparkLlmService {
 
             @Override
             public void onFailure(WebSocket webSocket, Throwable t, Response response) {
-                errorRef.compareAndSet(null, t instanceof Exception ? (Exception) t : new IOException(t));
+                errorRef.compareAndSet(null, buildWsFailureException(t, response));
                 if (completed.compareAndSet(false, true)) {
-                    callback.onError(errorRef.get());
                     latch.countDown();
                 }
             }
@@ -423,10 +432,11 @@ public class SparkLlmServiceImpl implements SparkLlmService {
         }
         URI uri = URI.create(wssUrl);
         String host = uri.getHost();
-        String path = uri.getRawPath();
+        String path = StrUtil.blankToDefault(uri.getRawPath(), "/");
 
-        String date = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.ENGLISH)
-                .format(new Date());
+        SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.ENGLISH);
+        format.setTimeZone(TimeZone.getTimeZone("GMT"));
+        String date = format.format(new Date());
         String authorization = generateSignature(host, path, date);
 
         String encodedAuth = URLEncoder.encode(authorization, StandardCharsets.UTF_8.name());
@@ -445,5 +455,37 @@ public class SparkLlmServiceImpl implements SparkLlmService {
         return String.format("api_key=\"%s\", algorithm=\"hmac-sha256\", headers=\"host date request-line\", signature=\"%s\"",
                 llmConfig.getApiKey(), signature);
     }
-}
 
+    private Exception buildWsFailureException(Throwable throwable, Response response) {
+        StringBuilder builder = new StringBuilder();
+        if (throwable != null && StrUtil.isNotBlank(throwable.getMessage())) {
+            builder.append(throwable.getMessage());
+        }
+        if (response != null) {
+            if (builder.length() > 0) {
+                builder.append(" | ");
+            }
+            builder.append("HTTP ").append(response.code()).append(" ").append(response.message());
+            try (ResponseBody body = response.body()) {
+                if (body != null) {
+                    String bodyStr = body.string();
+                    if (StrUtil.isNotBlank(bodyStr)) {
+                        builder.append(" | body=").append(bodyStr);
+                    }
+                }
+            } catch (IOException ignored) {
+                // 忽略错误响应体读取失败，保留主异常信息
+            }
+        }
+        String message = builder.length() > 0 ? builder.toString() : "Spark WebSocket 调用失败";
+        return throwable instanceof Exception ? new IOException(message, (Exception) throwable) : new IOException(message, throwable);
+    }
+
+    private boolean isSparkAuthFailure(Exception exception) {
+        if (exception == null) {
+            return false;
+        }
+        String message = StrUtil.nullToDefault(exception.getMessage(), "").toLowerCase(Locale.ROOT);
+        return message.contains("401") || message.contains("unauthorized");
+    }
+}

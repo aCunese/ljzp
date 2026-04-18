@@ -43,7 +43,7 @@
 		</div>
 		<el-dropdown :show-timeout="70" :hide-timeout="50" @command="onHandleCommandClick" class="custom-dropdown">
 			<span class="layout-navbars-breadcrumb-user-link">
-				<img :src="state.img" class="layout-navbars-breadcrumb-user-link-photo mr5" />
+				<img :src="state.img" class="layout-navbars-breadcrumb-user-link-photo mr5" @error="onAvatarError" />
 				{{ username }}
 				<el-icon class="el-icon--right">
 					<ele-ArrowDown />
@@ -86,8 +86,9 @@ const storesThemeConfig = useThemeConfig();
 const { userInfos } = storeToRefs(stores);
 const { themeConfig } = storeToRefs(storesThemeConfig);
 const searchRef = ref();
+const DEFAULT_AVATAR = 'https://wpimg.wallstcn.com/f778738c-e4f8-4870-b634-56703b4acafe.gif';
 const state = reactive({
-	img: '',
+	img: DEFAULT_AVATAR,
 	isScreenfull: false,
 	disabledI18n: 'zh-cn',
 	disabledSize: 'large',
@@ -183,23 +184,41 @@ const onLanguageChange = (lang: string) => {
 const initI18nOrSize = (value: string, attr: string) => {
 	state[attr] = Local.get('themeConfig')[value];
 };
+
+const normalizeAvatar = (avatar?: string | null) => {
+	if (typeof avatar === 'string' && avatar.trim()) {
+		return avatar;
+	}
+	return DEFAULT_AVATAR;
+};
+
+const onAvatarError = () => {
+	if (state.img !== DEFAULT_AVATAR) {
+		state.img = DEFAULT_AVATAR;
+	}
+};
+
 const getTableData = () => {
 	request.get('/api/user/' + userInfos.value.userName).then((res) => {
 		// console.log(res);
 		if (res.code == 0) {
-			state.img = res.data.avatar;
+			state.img = normalizeAvatar(res.data?.avatar);
 		} else {
+			state.img = DEFAULT_AVATAR;
 			ElMessage({
 				type: 'error',
 				message: res.msg,
 			});
 		}
+	}).catch(() => {
+		state.img = DEFAULT_AVATAR;
 	});
 };
 // 页面加载时
 onMounted(() => {
 	// console.log(userInfos.value);
 	username = userInfos.value.userName
+	state.img = normalizeAvatar((userInfos.value as any)?.photo);
 	getTableData();
 	if (Local.get('themeConfig')) {
 		initI18nOrSize('globalComponentSize', 'disabledSize');

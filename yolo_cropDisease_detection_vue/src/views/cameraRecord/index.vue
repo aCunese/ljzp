@@ -72,7 +72,7 @@
 								class="media-box__player"
 								preload="auto"
 								controls
-								:key="scope.row.outVideo + uniqueKey"
+								:key="`${scope.row.outVideo ?? 'camera-output'}-${uniqueKey}`"
 							>
 								<source :src="scope.row.outVideo" type="video/mp4" />
 							</video>

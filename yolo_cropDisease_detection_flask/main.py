@@ -78,59 +78,86 @@ class VideoProcessingApp:
 
     # 图片预测接口
     def predictImg(self):
-        data = request.get_json()
+        request_data = request.get_json() or {}
+        print(request_data)
+        data = {
+            "username": request_data.get('username'),
+            "weight": request_data.get('weight'),
+            "conf": request_data.get('conf'),
+            "startTime": request_data.get('startTime'),
+            "inputImg": request_data.get('inputImg'),
+            "kind": request_data.get('kind'),
+            "taskId": request_data.get('taskId')
+        }
         print(data)
-        self.data.clear()
-        self.data.update({
-            "username": data['username'], "weight": data['weight'],
-            "conf": data['conf'], "startTime": data['startTime'],
-            "inputImg": data['inputImg'],
-            "kind": data['kind'],
-            "taskId": data.get('taskId')
-        })
-        print(self.data)
-        task_id = self.data.get("taskId")
-        self.emit_task_event(task_id, 'processing', message='图片识别中', username=self.data.get("username"), kind=self.data.get("kind"))
 
-        input_img = self.data["inputImg"]
+        if not data["inputImg"]:
+            data["status"] = 400
+            data["message"] = "未提供图片链接"
+            return json.dumps(data, ensure_ascii=False)
+        if not data["weight"]:
+            data["status"] = 400
+            data["message"] = "未选择模型权重"
+            return json.dumps(data, ensure_ascii=False)
+        if not data["kind"]:
+            data["status"] = 400
+            data["message"] = "未选择作物类型"
+            return json.dumps(data, ensure_ascii=False)
+
+        task_id = data.get("taskId")
+        self.emit_task_event(task_id, 'processing', message='图片识别中', username=data.get("username"), kind=data.get("kind"))
+
+        input_img = data["inputImg"]
         cleanup_required = False
         if self.is_remote_resource(input_img):
             parsed = urlparse(input_img)
             img_filename = os.path.basename(parsed.path) or f"remote_{uuid.uuid4().hex}.jpg"
+            if not os.path.splitext(img_filename)[1]:
+                img_filename = f"{img_filename}.jpg"
             local_img_path = os.path.join(self.local_temp_dir, img_filename)
             self.download(input_img, local_img_path)
             if not os.path.exists(local_img_path):
-                self.data["status"] = 400
-                self.data["message"] = "图片下载失败，请稍后重试！"
-                return json.dumps(self.data, ensure_ascii=False)
+                data["status"] = 400
+                data["message"] = "图片下载失败，请稍后重试！"
+                return json.dumps(data, ensure_ascii=False)
             cleanup_required = True
         else:
             local_img_path = self.resolve_local_image_path(input_img)
             if not os.path.exists(local_img_path):
-                self.data["status"] = 400
-                self.data["message"] = "提供的本地图片路径不存在，请重新上传！"
-                self.emit_task_event(task_id, 'failed', message=self.data["message"])
-                return json.dumps(self.data, ensure_ascii=False)
+                data["status"] = 400
+                data["message"] = "提供的本地图片路径不存在，请重新上传！"
+                self.emit_task_event(task_id, 'failed', message=data["message"])
+                return json.dumps(data, ensure_ascii=False)
 
         result_filename = f"result_{uuid.uuid4().hex}.jpg"
         result_path = os.path.join(self.result_dir, result_filename)
         os.makedirs(os.path.dirname(result_path), exist_ok=True)
 
-        model, load_duration = self.get_or_load_model(self.data["weight"])
-        predict = ImagePredictor(weights_path=f'./weights/{self.data["weight"]}',
-                                 img_path=local_img_path, save_path=result_path, kind=self.data["kind"],
-                                 conf=float(self.data["conf"]), device=self.device, model=model)
-        # 执行预测
-        results = predict.predict(setup_time=load_duration)
+        try:
+            model, load_duration = self.get_or_load_model(data["weight"])
+            predict = ImagePredictor(weights_path=f'./weights/{data["weight"]}',
+                                     img_path=local_img_path, save_path=result_path, kind=data["kind"],
+                                     conf=float(data["conf"]), device=self.device, model=model)
+            # 执行预测
+            results = predict.predict(setup_time=load_duration)
+        except Exception as e:
+            data["status"] = 400
+            data["message"] = f"模型加载或推理失败：{e}"
+            self.emit_task_event(task_id, 'failed', message=data["message"])
+            if cleanup_required and os.path.exists(local_img_path):
+                os.remove(local_img_path)
+            if os.path.exists(result_path):
+                os.remove(result_path)
+            return json.dumps(data, ensure_ascii=False)
 
         if results['labels'] != '预测失败':
-            self.data["status"] = 200
-            self.data["message"] = "预测成功"
+            data["status"] = 200
+            data["message"] = "预测成功"
             result_url = urljoin(request.host_url, f"static/results/{result_filename}")
-            self.data["outImg"] = result_url
-            self.data["allTime"] = results['allTime']
-            self.data["confidence"] = json.dumps(results['confidences'])
-            self.data["label"] = json.dumps(results['labels'])
+            data["outImg"] = result_url
+            data["allTime"] = results['allTime']
+            data["confidence"] = json.dumps(results['confidences'])
+            data["label"] = json.dumps(results['labels'])
             self.emit_task_event(
                 task_id,
                 'completed',
@@ -140,14 +167,14 @@ class VideoProcessingApp:
                 allTime=results['allTime']
             )
             if self.enable_remote_upload:
-                self.data["uploadStatus"] = "pending"
+                data["uploadStatus"] = "pending"
                 self.schedule_async_upload(result_path, result_filename)
             else:
-                self.data["uploadStatus"] = "skipped"
+                data["uploadStatus"] = "skipped"
         else:
-            self.data["status"] = 400
-            self.data["message"] = "该图片无法识别，请重新上传！"
-            self.emit_task_event(task_id, 'failed', message=self.data["message"])
+            data["status"] = 400
+            data["message"] = "该图片无法识别，请重新上传！"
+            self.emit_task_event(task_id, 'failed', message=data["message"])
             if os.path.exists(result_path):
                 os.remove(result_path)
         
@@ -155,7 +182,7 @@ class VideoProcessingApp:
         if cleanup_required and os.path.exists(local_img_path):
             os.remove(local_img_path)
         
-        return json.dumps(self.data, ensure_ascii=False)
+        return json.dumps(data, ensure_ascii=False)
 
     # 视频流处理接口
     def predictVideo(self):
@@ -185,7 +212,17 @@ class VideoProcessingApp:
             fps,
             (640, 480)
         )
-        model, _ = self.get_or_load_model(self.data["weight"])
+        try:
+            model, _ = self.get_or_load_model(self.data["weight"])
+        except Exception as e:
+            self.cleanup_resources(cap, video_writer)
+            self.cleanup_files([self.paths['download'], self.paths['video_output']])
+            self.emit_task_event(task_id, 'failed', message=f'模型加载失败: {e}')
+            return self.app.response_class(
+                response=json.dumps({"status": 400, "message": f"模型加载失败：{e}"}, ensure_ascii=False),
+                status=400,
+                mimetype='application/json'
+            )
 
         def generate():
             try:
@@ -211,7 +248,7 @@ class VideoProcessingApp:
                 self.socketio.emit('progress', {'data': 100})
                 uploadedUrl = self.upload(self.paths['video_output'])
                 self.data["outVideo"] = uploadedUrl
-                self.save_data(json.dumps(self.data), 'http://localhost:9999/videoRecords')
+                self.save_data(json.dumps(self.data), 'http://localhost:9999/api/videoRecords')
                 self.emit_task_event(task_id, 'completed', outVideo=uploadedUrl, username=self.data.get("username"))
                 self.cleanup_files([self.paths['download'], self.paths['video_output']])
 
@@ -231,9 +268,23 @@ class VideoProcessingApp:
             warning = '请先选择模型再开始摄像头预测。'
             self.socketio.emit('message', {'data': warning})
             self.socketio.emit('camera_status', {'status': 'error', 'message': warning})
-            return Response(status=400)
+            return self.app.response_class(
+                response=json.dumps({"status": 400, "message": warning}, ensure_ascii=False),
+                status=400,
+                mimetype='application/json'
+            )
 
-        model, _ = self.get_or_load_model(weight_name)
+        try:
+            model, _ = self.get_or_load_model(weight_name)
+        except Exception as e:
+            warning = f'模型加载失败：{e}'
+            self.socketio.emit('message', {'data': warning})
+            self.socketio.emit('camera_status', {'status': 'error', 'message': warning})
+            return self.app.response_class(
+                response=json.dumps({"status": 400, "message": warning}, ensure_ascii=False),
+                status=400,
+                mimetype='application/json'
+            )
         preferred_index = request.args.get('cameraIndex')
         cap, camera_index, diagnostics = self.open_camera(preferred_index)
         if diagnostics:
@@ -245,7 +296,11 @@ class VideoProcessingApp:
             warning = '未检测到可用摄像头，请检查设备连接。'
             self.socketio.emit('message', {'data': warning})
             self.socketio.emit('camera_status', {'status': 'error', 'message': warning})
-            return Response(status=503)
+            return self.app.response_class(
+                response=json.dumps({"status": 503, "message": warning}, ensure_ascii=False),
+                status=503,
+                mimetype='application/json'
+            )
 
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -283,7 +338,7 @@ class VideoProcessingApp:
                 uploadedUrl = self.upload(self.paths['camera_output'])
                 self.data["outVideo"] = uploadedUrl
                 print(self.data)
-                self.save_data(json.dumps(self.data), 'http://localhost:9999/cameraRecords')
+                self.save_data(json.dumps(self.data), 'http://localhost:9999/api/cameraRecords')
                 self.cleanup_files([self.paths['download'], self.paths['camera_output']])
 
         return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
@@ -334,18 +389,24 @@ class VideoProcessingApp:
 
     # 上传处理后的图片或视频文件到远程服务器
     def upload(self, out_path):
-        upload_url = "http://localhost:9999/files/upload"
-        try:
-            with open(out_path, 'rb') as file:
-                files = {'file': (os.path.basename(out_path), file)}
-                response = requests.post(upload_url, files=files)
-                if response.status_code == 200:
-                    print("文件上传成功！")
-                    return response.json()['data']
-                else:
-                    print("文件上传失败！")
-        except Exception as e:
-            print(f"上传文件时发生错误: {str(e)}")
+        upload_urls = [
+            "http://localhost:9999/api/files/upload",
+            "http://localhost:9999/files/upload",
+        ]
+        last_error = None
+        for upload_url in upload_urls:
+            try:
+                with open(out_path, 'rb') as file:
+                    files = {'file': (os.path.basename(out_path), file)}
+                    response = requests.post(upload_url, files=files, timeout=20)
+                    if response.status_code == 200:
+                        payload = response.json()
+                        print(f"文件上传成功！({upload_url})")
+                        return payload.get('data')
+                    last_error = f"{upload_url} -> HTTP {response.status_code}"
+            except Exception as e:
+                last_error = f"{upload_url} -> {str(e)}"
+        print(f"文件上传失败！{last_error if last_error else ''}")
 
     # 下载文件并保存到指定路径
     def download(self, url, save_path):
@@ -591,6 +652,12 @@ class VideoProcessingApp:
 
     # 获取已加载的模型或加载新模型，并返回加载耗时
     def get_or_load_model(self, weight_name):
+        if not weight_name:
+            raise ValueError("未选择模型权重")
+        weight_path = os.path.join('./weights', weight_name)
+        if not os.path.isfile(weight_path):
+            raise FileNotFoundError(f"权重文件不存在: {weight_name}")
+
         if weight_name in self.model_cache and weight_name in self.model_ready:
             return self.model_cache[weight_name], 0.0
 
@@ -604,7 +671,7 @@ class VideoProcessingApp:
         except Exception:
             pass  # 如果当前没有活跃的Socket客户端，不影响加载过程
 
-        model = YOLO(f'./weights/{weight_name}')
+        model = YOLO(weight_path)
         if self.device != "cpu":
             model.to(self.device)
         # 主动热身以避免首次推理抖动

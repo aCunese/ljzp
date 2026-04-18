@@ -30,12 +30,15 @@
 					<span style="margin-left: 12px; min-width: 48px; font-weight: 600; color: #1a745d;">{{ conf }}%</span>
 				</div>
 				<el-upload v-model="state.form.inputVideo" ref="uploadFile" class="avatar-uploader"
-					action="http://localhost:9999/files/upload" :show-file-list="false"
+					action="/api/files/upload" :show-file-list="false"
 					:on-success="handleAvatarSuccessone">
 					<div class="button-section" style="margin-left: 20px">
 						<el-button type="info" class="predict-button">上传视频</el-button>
 					</div>
 				</el-upload>
+				<div class="button-section" style="margin-left: 20px">
+					<el-button type="info" plain @click="loadSampleVideo" :loading="state.sampleLoading" class="predict-button">示例视频</el-button>
+				</div>
 				<div class="button-section" style="margin-left: 20px">
 					<el-button type="primary" @click="upData" class="predict-button">开始处理</el-button>
 				</div>
@@ -47,6 +50,8 @@
 			</div>
 			<div class="cards" ref="cardsContainer">
 				<img v-if="state.video_path" class="video" :src="state.video_path">
+				<video v-else-if="state.form.inputVideo" class="video" :src="state.form.inputVideo" controls muted></video>
+				<div v-else class="empty-state">请先上传视频或使用示例视频。</div>
 			</div>
 		</div>
 	</div>
@@ -69,6 +74,14 @@ const stores = useUserInfo();
 const conf = ref(50);
 const kind = ref('');
 const weight = ref('');
+const sampleVideoIndex = ref(0);
+const DEFAULT_SAMPLE_VIDEO_URLS = [
+	'/api/files/real_corn_video_01',
+	'/api/files/real_rice_video_01',
+	'/api/files/real_strawberry_video_01',
+	'/api/files/real_tomato_video_01',
+	'/api/files/demo_video_flower',
+];
 const { userInfos } = storeToRefs(stores);
 
 const handleAvatarSuccessone: UploadProps['onSuccess'] = (response, uploadFile) => {
@@ -104,6 +117,7 @@ const state = reactive({
 	type_text: "正在保存",
 	percentage: 50,
 	isShow: false,
+	sampleLoading: false,
 	form: {
 		username: '',
 		inputVideo: null as any,
@@ -190,15 +204,55 @@ const getData = () => {
 	request.get('/api/flask/file_names').then((res) => {
 		if (res.code == 0) {
 			res.data = JSON.parse(res.data);
-			state.weight_items = res.data.weight_items.filter(item => item.value.includes(kind.value));
+			const allWeightItems = Array.isArray(res.data.weight_items) ? res.data.weight_items : [];
+			if (!kind.value) {
+				state.weight_items = allWeightItems;
+				return;
+			}
+			const filteredWeightItems = allWeightItems.filter((item: any) => String(item?.value ?? '').includes(kind.value));
+			// 如果当前作物没有专属命名模型，则回退为全量模型，避免下拉为空导致无法检测。
+			state.weight_items = filteredWeightItems.length > 0 ? filteredWeightItems : allWeightItems;
 		} else {
 			ElMessage.error(res.msg);
 		}
 	});
 };
 
+const applySampleVideo = (url: string) => {
+	state.form.inputVideo = url;
+	state.video_path = '';
+};
+
+const loadSampleVideo = async () => {
+	state.sampleLoading = true;
+	try {
+		const sampleUrl = DEFAULT_SAMPLE_VIDEO_URLS[sampleVideoIndex.value % DEFAULT_SAMPLE_VIDEO_URLS.length];
+		sampleVideoIndex.value += 1;
+		applySampleVideo(sampleUrl);
+		ElMessage.success('示例视频已加载，可直接开始处理。');
+	} catch (error) {
+		console.error('加载示例视频失败:', error);
+		applySampleVideo(DEFAULT_SAMPLE_VIDEO_URLS[0]);
+		ElMessage.warning('示例视频加载失败，已切换到默认示例视频。');
+	} finally {
+		state.sampleLoading = false;
+	}
+};
+
 
 const upData = () => {
+	if (!kind.value) {
+		ElMessage.warning('请先选择作物种类');
+		return;
+	}
+	if (!weight.value) {
+		ElMessage.warning('请先选择模型');
+		return;
+	}
+	if (!state.form.inputVideo) {
+		ElMessage.warning('请先上传视频或加载示例视频');
+		return;
+	}
 	state.form.weight = weight.value;
 	state.form.conf = Number((conf.value / 100).toFixed(2));
 	state.form.username = userInfos.value.userName;
@@ -212,6 +266,7 @@ const upData = () => {
 
 onMounted(() => {
 	getData();
+	loadSampleVideo();
 });
 </script>
 
@@ -226,6 +281,10 @@ onMounted(() => {
 	.system-predict-padding {
 		padding: 15px;
 		background: radial-gradient(circle, #e3f7ef 0%, #ffffff 100%);
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
 
 		.el-table {
 			flex: 1;
@@ -235,8 +294,11 @@ onMounted(() => {
 
 .header {
 	width: 100%;
-	height: 5%;
+	height: auto;
+	min-height: 72px;
 	display: flex;
+	flex-wrap: wrap;
+	gap: 10px 0;
 	justify-content: start;
 	align-items: center;
 	font-size: 20px;
@@ -244,9 +306,10 @@ onMounted(() => {
 
 .cards {
 	width: 100%;
-	height: 95%;
+	flex: 1;
+	min-height: 0;
 	border-radius: var(--next-radius-md);
-	margin-top: 15px;
+	margin-top: 12px;
 	padding: 0px;
 	overflow: hidden;
 	display: flex;
@@ -262,6 +325,11 @@ onMounted(() => {
 	/* 限制视频最大高度不超过父元素高度 */
 	height: auto;
 	object-fit: contain;
+}
+
+.empty-state {
+	color: #909399;
+	font-size: 14px;
 }
 
 .button-section {

@@ -9,6 +9,11 @@
 	<body>
 		<div id="app"></div>
 		<script type="text/javascript">
+			if (typeof window !== 'undefined' && typeof window.global === 'undefined') {
+				window.global = window;
+			}
+		</script>
+		<script type="text/javascript">
 			var _hmt = _hmt || [];
 			(function () {
 				var hm = document.createElement('script');

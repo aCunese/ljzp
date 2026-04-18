@@ -62,6 +62,18 @@
 					<div class="param-item">
 						<el-button
 							class="recognize-btn"
+							type="info"
+							plain
+							size="default"
+							@click="loadSampleImage"
+							:loading="state.sampleLoading"
+						>
+							加载示例图片
+						</el-button>
+					</div>
+					<div class="param-item">
+						<el-button
+							class="recognize-btn"
 							type="primary"
 							size="default"
 							@click="upData"
@@ -158,6 +170,16 @@ const imageUrl = ref('');
 const conf = ref(0.5);
 const weight = ref('');
 const kind = ref('');
+const sampleImageIndex = ref(0);
+const DEFAULT_SAMPLE_IMAGE_URLS = [
+	'/api/files/real_tomato_late_blight_01',
+	'/api/files/real_citrus_canker_01',
+	'/api/files/real_rice_sheath_blight_01',
+	'/api/files/real_strawberry_leaf_spot_01',
+	'/api/files/real_corn_leaf_blight_01',
+	'/api/files/708a9e6401aa4b7fbab2e1b3d50c1ce4',
+	'/api/files/demo_image_404',
+];
 const uploadFile = ref<UploadInstance>();
 const uploadAction = ref('/api/files/upload');
 const stores = useUserInfo();
@@ -179,6 +201,7 @@ const state = reactive({
 		allTime: '',
 	},
 	loading: false,
+	sampleLoading: false,
 });
 
 const confPercent = computed({
@@ -238,6 +261,7 @@ const resetForm = () => {
 	state.predictionResult.confidence = '';
 	state.predictionResult.allTime = '';
 	state.loading = false;
+	state.sampleLoading = false;
 	uploadFile.value?.clearFiles();
 	getData();
 };
@@ -323,6 +347,31 @@ const getData = () => {
 		});
 };
 
+const applySampleImage = (url: string) => {
+	imageUrl.value = url;
+	state.img = url;
+	state.predictionResult.label = '';
+	state.predictionResult.confidence = '';
+	state.predictionResult.allTime = '';
+	uploadFile.value?.clearFiles();
+};
+
+const loadSampleImage = async () => {
+	state.sampleLoading = true;
+	try {
+		const sampleUrl = DEFAULT_SAMPLE_IMAGE_URLS[sampleImageIndex.value % DEFAULT_SAMPLE_IMAGE_URLS.length];
+		sampleImageIndex.value += 1;
+		applySampleImage(sampleUrl);
+		ElMessage.success('示例图片已加载，可直接开始识别。');
+	} catch (error) {
+		console.error('加载示例图片失败:', error);
+		applySampleImage(DEFAULT_SAMPLE_IMAGE_URLS[0]);
+		ElMessage.warning('示例图片加载失败，已切换到默认示例图片。');
+	} finally {
+		state.sampleLoading = false;
+	}
+};
+
 const upData = async () => {
 	if (!state.img) {
 		ElMessage.warning('请先上传图片。');
@@ -375,6 +424,7 @@ const goToSolutionCenter = () => {
 
 onMounted(() => {
 	getData();
+	loadSampleImage();
 });
 </script>
 

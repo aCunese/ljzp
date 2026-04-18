@@ -31,9 +31,9 @@
 					style="width: 150px"
 					@change="handleSearch"
 				>
-					<el-option label="高风险" value="HIGH" />
-					<el-option label="中风险" value="MEDIUM" />
-					<el-option label="低风险" value="LOW" />
+					<el-option label="高风险" value="High" />
+					<el-option label="中风险" value="Medium" />
+					<el-option label="低风险" value="Low" />
 				</el-select>
 				<el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
 				<el-button :icon="Refresh" @click="handleReset">重置</el-button>
@@ -48,8 +48,8 @@
 				<el-table-column prop="pathogenType" label="病原类型" width="120" />
 				<el-table-column prop="riskLevel" label="风险等级" width="100" align="center">
 					<template #default="{ row }">
-						<el-tag v-if="row.riskLevel === 'HIGH'" type="danger">高风险</el-tag>
-						<el-tag v-else-if="row.riskLevel === 'MEDIUM'" type="warning">中风险</el-tag>
+						<el-tag v-if="normalizeRiskLevel(row.riskLevel) === 'HIGH'" type="danger">高风险</el-tag>
+						<el-tag v-else-if="normalizeRiskLevel(row.riskLevel) === 'MEDIUM'" type="warning">中风险</el-tag>
 						<el-tag v-else type="success">低风险</el-tag>
 					</template>
 				</el-table-column>
@@ -125,9 +125,9 @@
 				</el-row>
 				<el-form-item label="风险等级" prop="riskLevel">
 					<el-radio-group v-model="form.riskLevel">
-						<el-radio label="HIGH">高风险</el-radio>
-						<el-radio label="MEDIUM">中风险</el-radio>
-						<el-radio label="LOW">低风险</el-radio>
+						<el-radio label="High">高风险</el-radio>
+						<el-radio label="Medium">中风险</el-radio>
+						<el-radio label="Low">低风险</el-radio>
 					</el-radio-group>
 				</el-form-item>
 				<el-form-item label="病害描述" prop="description">
@@ -197,6 +197,9 @@ const rules = {
 	riskLevel: [{ required: true, message: '请选择风险等级', trigger: 'change' }],
 };
 
+const isSuccessCode = (code: unknown) => code === 0 || code === '0';
+const normalizeRiskLevel = (riskLevel?: string) => (riskLevel || '').toUpperCase();
+
 // 加载数据
 const loadData = async () => {
 	loading.value = true;
@@ -206,7 +209,7 @@ const loadData = async () => {
 			pageSize: pageSize.value,
 			...searchForm,
 		});
-		if (res.code === '0') {
+		if (isSuccessCode(res.code)) {
 			tableData.value = res.data.records;
 			total.value = res.data.total;
 		} else {
@@ -259,7 +262,7 @@ const handleDelete = (row: DiseaseInfo) => {
 		.then(async () => {
 			try {
 				const res: any = await deleteDisease(row.id!);
-				if (res.code === '0') {
+				if (isSuccessCode(res.code)) {
 					ElMessage.success('删除成功');
 					loadData();
 				} else {
@@ -285,7 +288,7 @@ const handleSubmit = async () => {
 				? await updateDisease(form.id!, form)
 				: await createDisease(form);
 
-			if (res.code === '0') {
+			if (isSuccessCode(res.code)) {
 				ElMessage.success(isEdit.value ? '更新成功' : '新增成功');
 				dialogVisible.value = false;
 				loadData();

@@ -248,15 +248,17 @@ const rules = {
 	status: [{ required: true, message: '请选择方案状态', trigger: 'change' }],
 };
 
+const isSuccessCode = (code: unknown) => code === 0 || code === '0';
+
 // 加载病害和药剂选项
 const loadOptions = async () => {
 	try {
 		const [diseaseRes, remedyRes]: any = await Promise.all([getAllDiseases(), getAllRemedies()]);
 		
-		if (diseaseRes.code === '0') {
+		if (isSuccessCode(diseaseRes.code)) {
 			diseaseOptions.value = diseaseRes.data;
 		}
-		if (remedyRes.code === '0') {
+		if (isSuccessCode(remedyRes.code)) {
 			remedyOptions.value = remedyRes.data;
 		}
 	} catch (error) {
@@ -273,7 +275,7 @@ const loadData = async () => {
 			pageSize: pageSize.value,
 			...searchForm,
 		});
-		if (res.code === '0') {
+		if (isSuccessCode(res.code)) {
 			// 关联病害和药剂名称
 			tableData.value = res.data.records.map((item: any) => {
 				const disease = diseaseOptions.value.find(d => d.id === item.diseaseId);
@@ -307,7 +309,7 @@ const handleDiseaseChange = (diseaseId: number) => {
 const handleStatusChange = async (row: any) => {
 	try {
 		const res: any = await updateSolutionPlanStatus(row.id, row.status);
-		if (res.code === '0') {
+		if (isSuccessCode(res.code)) {
 			ElMessage.success('状态更新成功');
 		} else {
 			ElMessage.error(res.msg || '更新失败');
@@ -359,7 +361,7 @@ const handleDelete = (row: any) => {
 		.then(async () => {
 			try {
 				const res: any = await deleteSolutionPlan(row.id);
-				if (res.code === '0') {
+				if (isSuccessCode(res.code)) {
 					ElMessage.success('删除成功');
 					loadData();
 				} else {
@@ -385,7 +387,7 @@ const handleSubmit = async () => {
 				? await updateSolutionPlan(form.id!, form)
 				: await createSolutionPlan(form);
 
-			if (res.code === '0') {
+			if (isSuccessCode(res.code)) {
 				ElMessage.success(isEdit.value ? '更新成功' : '新增成功');
 				dialogVisible.value = false;
 				loadData();
@@ -451,4 +453,3 @@ onMounted(async () => {
 	}
 }
 </style>
-

@@ -61,6 +61,9 @@
                 <div class="button-section" style="margin-left: 20px">
 					<el-button type="primary" @click="stop" class="predict-button">结束录制</el-button>
 				</div>
+				<div class="button-section" style="margin-left: 20px">
+					<el-button type="info" plain @click="loadSamplePlayback" :loading="state.sampleLoading" class="predict-button">示例回放</el-button>
+				</div>
 				<div class="demo-progress" v-if="state.isShow">
 					<el-progress :text-inside="true" :stroke-width="20" :percentage=state.percentage style="width: 380px;">
 						<span>{{ state.type_text }} {{ state.percentage }}%</span>
@@ -69,6 +72,7 @@
 			</div>
 			<div class="cards" ref="cardsContainer">
 				<img v-if="state.cameraisShow" class="video" :src="state.video_path">
+				<div v-else class="empty-state">请连接摄像头，或点击上方“示例回放”查看素材。</div>
 			</div>
 		</div>
 	</div>
@@ -81,7 +85,6 @@ import { ElMessage } from 'element-plus';
 import request from '/@/utils/request';
 import { useUserInfo } from '/@/stores/userInfo';
 import { storeToRefs } from 'pinia';
-import type { UploadInstance, UploadProps } from 'element-plus';
 import { SocketService } from '/@/utils/socket';
 import { formatDate } from '/@/utils/formatTime';
 
@@ -90,6 +93,14 @@ const conf = ref(50);
 const kind = ref('');
 const weight = ref('');
 const cameraIndex = ref<number | ''>('');
+const samplePlaybackIndex = ref(0);
+const DEFAULT_SAMPLE_VIDEO_URLS = [
+	'/api/files/real_corn_video_01',
+	'/api/files/real_rice_video_01',
+	'/api/files/real_strawberry_video_01',
+	'/api/files/real_tomato_video_01',
+	'/api/files/demo_video_flower',
+];
 const { userInfos } = storeToRefs(stores);
 
 const state = reactive({
@@ -122,6 +133,8 @@ const state = reactive({
 	percentage: 50,
 	isShow: false,
 	cameraisShow: false,
+	sampleLoading: false,
+	fallbackMode: false,
 	form: {
 		username: '',
 		weight: '',
@@ -227,7 +240,14 @@ const getData = () => {
 	request.get('/api/flask/file_names').then((res) => {
 		if (res.code == 0) {
 			res.data = JSON.parse(res.data);
-			state.weight_items = res.data.weight_items.filter(item => item.value.includes(kind.value));
+			const allWeightItems = Array.isArray(res.data.weight_items) ? res.data.weight_items : [];
+			if (!kind.value) {
+				state.weight_items = allWeightItems;
+				return;
+			}
+			const filteredWeightItems = allWeightItems.filter((item: any) => String(item?.value ?? '').includes(kind.value));
+			// 如果当前作物没有专属命名模型，则回退为全量模型，避免下拉为空导致无法检测。
+			state.weight_items = filteredWeightItems.length > 0 ? filteredWeightItems : allWeightItems;
 		} else {
 			ElMessage.error(res.msg);
 		}
@@ -270,9 +290,44 @@ const fetchCameras = () => {
 			console.error('获取摄像头列表失败:', error);
 			ElMessage.error('获取摄像头列表失败，请检查 Flask 服务是否运行');
 		})
-		.finally(() => {
-			state.cameraLoading = false;
-		});
+			.finally(() => {
+				state.cameraLoading = false;
+			});
+};
+
+const loadSamplePlayback = async () => {
+	if (!kind.value) {
+		ElMessage.warning('请先选择作物种类');
+		return;
+	}
+	if (!weight.value) {
+		ElMessage.warning('请先选择模型');
+		return;
+	}
+	state.sampleLoading = true;
+	try {
+		const sampleUrl = DEFAULT_SAMPLE_VIDEO_URLS[samplePlaybackIndex.value % DEFAULT_SAMPLE_VIDEO_URLS.length];
+		samplePlaybackIndex.value += 1;
+
+		const fallbackForm = {
+			username: userInfos.value.userName,
+			inputVideo: sampleUrl,
+			weight: weight.value,
+			conf: Number((conf.value / 100).toFixed(2)),
+			kind: kind.value,
+			startTime: formatDate(new Date(), 'YYYY-mm-dd HH:MM:SS'),
+		};
+		const queryParams = new URLSearchParams(fallbackForm as Record<string, string>).toString();
+		state.video_path = `http://127.0.0.1:5001/predictVideo?${queryParams}`;
+		state.cameraisShow = true;
+		state.fallbackMode = true;
+		ElMessage.success('已加载示例回放，可先验证识别流程。');
+	} catch (error) {
+		console.error('加载示例回放失败:', error);
+		ElMessage.error('加载示例回放失败，请稍后重试。');
+	} finally {
+		state.sampleLoading = false;
+	}
 };
 
 
@@ -290,6 +345,7 @@ const start = () => {
 		return;
 	}
 	state.cameraisShow = true;
+	state.fallbackMode = false;
 	state.form.weight = weight.value;
 	state.form.kind = kind.value;
 	state.form.conf = Number((conf.value / 100).toFixed(2));
@@ -308,6 +364,12 @@ const start = () => {
 };
 
 const stop = () => {
+	if (state.fallbackMode) {
+		state.cameraisShow = false;
+		state.video_path = '';
+		state.fallbackMode = false;
+		return;
+	}
 	request.get('/flask/stopCamera').then((res) => {
 		if (res.code == 0) {
 			res.data = JSON.parse(res.data);
@@ -319,6 +381,7 @@ const stop = () => {
 	});
 	state.cameraisShow = false
 	state.video_path = ''
+	state.fallbackMode = false
 };
 
 onMounted(() => {
@@ -338,6 +401,10 @@ onMounted(() => {
 	.system-predict-padding {
 		padding: 15px;
 		background: radial-gradient(circle, #e3f7ef 0%, #ffffff 100%);
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
 
 		.el-table {
 			flex: 1;
@@ -347,8 +414,11 @@ onMounted(() => {
 
 .header {
 	width: 100%;
-	height: 5%;
+	height: auto;
+	min-height: 72px;
 	display: flex;
+	flex-wrap: wrap;
+	gap: 10px 0;
 	justify-content: start;
 	align-items: center;
 	font-size: 20px;
@@ -356,9 +426,10 @@ onMounted(() => {
 
 .cards {
 	width: 100%;
-	height: 95%;
+	flex: 1;
+	min-height: 0;
 	border-radius: var(--next-radius-md);
-	margin-top: 15px;
+	margin-top: 12px;
 	padding: 0px;
 	overflow: hidden;
 	display: flex;
@@ -374,6 +445,11 @@ onMounted(() => {
 	/* 限制视频最大高度不超过父元素高度 */
 	height: auto;
 	object-fit: contain;
+}
+
+.empty-state {
+	color: #909399;
+	font-size: 14px;
 }
 
 .button-section {
