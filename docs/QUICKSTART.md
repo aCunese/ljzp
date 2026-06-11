@@ -222,7 +222,7 @@ server.port=9999
 server.servlet.context-path=/api
 ```
 
-提示：当前仓库 `application.properties` 含敏感配置（数据库口令、LLM Key），建议你本地改为自己的值，并避免把真实密钥提交到仓库。
+提示：当前仓库 `application.properties` 已改为公开安全的占位符配置。你需要在本地替换数据库口令和 `llm.spark.*` 参数后再运行；如果不配置星火密钥，系统会自动使用降级回复逻辑。
 
 ## 4. 启动方式 A：一键启动（推荐）
 

@@ -4,7 +4,7 @@
 
 ## 1. 技术栈
 - **框架**：Flask 2 + Flask-SocketIO 5（基于 eventlet/WSGI），REST + WebSocket 双通道。
-- **深度学习**：Ultralytics YOLO v8 系列，Torch 1.9+，支持 CUDA/FP16 自动启用。
+- **深度学习**：Ultralytics YOLO v11 系列，Torch 1.9+，支持 CUDA/FP16 自动启用。
 - **多媒体**：OpenCV 4 处理视频帧，NumPy 进行矩阵运算。
 - **任务管理**：自研 `ImagePredictor`，封装模型加载、标签映射、推理耗时统计与结果保存。
 

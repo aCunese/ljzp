@@ -1,7 +1,7 @@
 
 # 工程简介
 
-本项目是基于 Spring Boot 的后端服务（artifactId: Kcsj）。默认编译目标为 Java 8，但项目已做了兼容性处理，可以在本机的 Java 17 环境下使用 Maven Wrapper 构建并运行。
+本模块是农疾智判平台的 Spring Boot 中台服务，当前包名已整理为 `com.acunese.ljzp`。默认编译目标为 Java 8，但项目已做了兼容性处理，可以在本机的 Java 17 环境下使用 Maven Wrapper 构建并运行。
 
 ## 快速开始（使用当前系统 Java 17）
 
@@ -23,7 +23,7 @@ java -version
 ```powershell
 .\mvnw.cmd spring-boot:run
 # 或者运行打包后的 jar：
-# java -jar target\Kcsj-0.0.1-SNAPSHOT.jar
+# java -jar target\ljzp-backend-0.0.1-SNAPSHOT.jar
 ```
 
 4. 配置（重要）
@@ -31,9 +31,16 @@ java -version
 - 数据库连接配置位于 `src/main/resources/application.properties`：
 	- `spring.datasource.url=jdbc:mysql://localhost:3306/cropdisease?serverTimezone=Asia/Shanghai`
 	- `spring.datasource.username=root`
-	- `spring.datasource.password=123456`
+	- `spring.datasource.password=YOUR_DB_PASSWORD`
 
 	请根据你的数据库实际情况修改并确保数据库可连通。
+
+- 若需要启用星火大模型，请补齐以下配置：
+	- `llm.spark.app-id=YOUR_APP_ID`
+	- `llm.spark.api-key=YOUR_API_KEY`
+	- `llm.spark.api-secret=YOUR_API_SECRET`
+
+	未配置时，聊天接口会自动回退到本地降级回复模式，方便本地演示。
 
 ## 常见问题与排查
 
@@ -51,7 +58,7 @@ java -version
 
 ---
 
-延伸阅读与配置说明请参考项目中的 `application.properties`。
+延伸阅读与配置说明请参考项目中的 `application.properties` 与根目录 [README](/Users/ruyne./Library/Mobile%20Documents/com~apple~CloudDocs/ljzp/README.md)。
 
 ## 开发者上手指南
 
@@ -136,7 +143,7 @@ INSERT INTO `user` (username, password, name, role, email, time) VALUES ('admin'
 	- POST /user  -> 新增用户（请求体：User 对象）
 
 - 图像预测与记录（`/flask`, `/imgRecords`）
-	- POST /flask/predict  -> 发起预测请求（请求体：{username,startTime,weight,inputImg,kind,conf,weight}），服务会调用本地 Flask API（默认 http://localhost:5000/predictImg），并将结果保存到 `imgrecords`。
+	- POST /flask/predict  -> 发起预测请求（请求体：{username,startTime,weight,inputImg,kind,conf,weight}），服务会调用本地 Flask API（默认 http://localhost:5001/predictImg），并将结果保存到 `imgrecords`。
 	- GET /flask/file_names  -> 获取 Flask 服务的文件名列表（代理到 Flask: /file_names）
 	- GET /imgRecords  -> 分页查询图像记录（支持多字段搜索）
 	- GET /imgRecords/{id}  -> 根据 id 查询图像记录
@@ -159,7 +166,7 @@ INSERT INTO `user` (username, password, name, role, email, time) VALUES ('admin'
 	- DELETE /cameraRecords/{id}  -> 删除
 	- videoRecords 同上（接口路径为 `/videoRecords`）
 
-> 注意：预测功能会调用本地 Flask 服务（项目通过 `PredictionController` 调用 http://localhost:5000/predictImg）。若你使用 docker-compose 启动 Flask，请确保将地址与端口对应修改。
+> 注意：预测功能会调用本地 Flask 服务（项目通过 `PredictionController` 调用 http://localhost:5001/predictImg）。若你使用 docker-compose 启动 Flask，请确保将地址与端口对应修改。
 
 ### 3) docker-compose 示例（快速启动 MySQL 与一个占位的 Flask 服务）
 

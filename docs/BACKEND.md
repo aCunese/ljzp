@@ -10,7 +10,7 @@
 
 ## 2. 包结构
 ```
-com.example.Kcsj
+com.acunese.ljzp
 ├─ bootstrap/            # 启动初始化，如 CommandLineRunner
 ├─ common/               # 统一返回 Result、异常处理
 ├─ config/               # CORS、Swagger、MQTT（预留）等配置
@@ -19,7 +19,7 @@ com.example.Kcsj
 ├─ entity/               # MyBatis-Plus 实体映射病害知识、方案、记录、传感器
 ├─ mapper/               # Mapper 接口（自动生成或手写 SQL）
 ├─ service/ & impl/      # 业务服务层
-└─ KcsjApplication       # 入口类
+└─ LjzpApplication       # Spring Boot 入口类
 ```
 
 ## 3. 核心模块
